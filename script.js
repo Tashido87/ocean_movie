@@ -93,8 +93,6 @@ async function fetchSheetData(sheetName) {
 
 /**
  * HELPER: Fixes raw URLs and Bypasses Hotlink Protection.
- * 1. Converts IMPAwards HTML pages to direct JPG links.
- * 2. Routes them through a proxy (wsrv.nl) to avoid 403 Forbidden errors.
  */
 function processPosterUrl(url) {
     if (!url) return CONFIG.PLACEHOLDER_IMG;
@@ -110,9 +108,7 @@ function processPosterUrl(url) {
     }
 
     // 2. Bypass Hotlink Protection (403 Error)
-    // If the URL is from ImpAwards (even after fixing), we must proxy it.
     if (cleanUrl.includes('impawards.com')) {
-        // We use https://wsrv.nl/ which is a free, open-source image proxy
         return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}`;
     }
 
@@ -126,27 +122,56 @@ async function loadAllContent() {
             fetchSheetData(CONFIG.SHEETS.TV)
         ]);
 
-        // Helper to parse rows
-        const parseRow = (row, type) => ({
-            id: generateId(row[0]),
-            title: row[0] || 'Untitled',
-            year: row[1] || 'N/A',
-            language: row[2] || 'Unknown',
-            genre: row[3] ? row[3].split(',').map(g => g.trim()) : [],
-            synopsis: row[4] || 'No synopsis available.',
-            cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
-            imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
-            // UPDATED: Use the helper function that adds the proxy
-            posterUrl: processPosterUrl(row[7]),
-            trailerUrl: row[8] || '',
-            type: type
-        });
+        // Helper: Check if row has data (Title OR Year must exist)
+        const isValidRow = (row) => {
+            const hasTitle = row[0] && row[0].trim() !== '';
+            const hasYear = row[1] && row[1].trim() !== '';
+            return hasTitle || hasYear; // Keep if EITHER exists
+        };
 
-        // Process Movies (Skip header row 0)
-        const movies = moviesRaw.slice(1).map(row => parseRow(row, 'Movie'));
+        // Helper to parse rows
+        const parseRow = (row, type) => {
+            // Determine Subtitle Status
+            let isBurmese = false;
+            
+            if (type === 'Movie') {
+                // Movies: Check Column J (Index 9)
+                isBurmese = (row[9] === 'TRUE');
+            } else {
+                // TV Shows: Check Column L (Index 11)
+                // We use safe access (row[11]) in case the row is short
+                isBurmese = (row[11] === 'TRUE');
+            }
+
+            const subtitleText = isBurmese ? 'Burmese Subtitle' : 'English Subtitle';
+
+            return {
+                id: generateId(row[0]),
+                title: row[0] || 'Untitled',
+                year: row[1] || 'N/A',
+                language: row[2] || 'Unknown',
+                genre: row[3] ? row[3].split(',').map(g => g.trim()) : [],
+                synopsis: row[4] || 'No synopsis available.',
+                cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
+                imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
+                posterUrl: processPosterUrl(row[7]),
+                trailerUrl: row[8] || '',
+                // Episodes (TV Only) - Column J (Index 9)
+                episodes: (type === 'TV Show' && row[9]) ? row[9].split('\n').filter(s => s.trim() !== '') : [],
+                subtitle: subtitleText, // Store the determined subtitle
+                type: type
+            };
+        };
+
+        // Process Movies (Filter empty rows -> Map to objects)
+        const movies = moviesRaw.slice(1)
+            .filter(isValidRow) 
+            .map(row => parseRow(row, 'Movie'));
         
-        // Process TV Shows (Skip header row 0)
-        const tvShows = tvShowsRaw.slice(1).map(row => parseRow(row, 'TV Show'));
+        // Process TV Shows (Filter empty rows -> Map to objects)
+        const tvShows = tvShowsRaw.slice(1)
+            .filter(isValidRow)
+            .map(row => parseRow(row, 'TV Show'));
 
         state.allContent = [...movies, ...tvShows];
         
@@ -196,6 +221,7 @@ function renderHero() {
                     <span class="imdb-score">IMDB ${heroItem.imdb}</span>
                     <span>${heroItem.year}</span>
                     <span class="meta-badge">${heroItem.type}</span>
+                    <span class="meta-badge subtitle-badge">${heroItem.subtitle}</span>
                 </div>
                 <p class="hero-desc">${heroItem.synopsis}</p>
                 <div class="hero-actions">
@@ -343,19 +369,12 @@ function populateYearFilter() {
 // 5. DETAIL MODAL & INTERACTIONS
 // =========================================
 
-// NEW: Function to handle clicking a cast member
+// Function to handle clicking a cast member
 window.searchByCast = function(actorName) {
-    // 1. Close the modal
     DOM.detailModal.classList.add('hidden');
     document.body.style.overflow = '';
-
-    // 2. Set the search input to the actor's name
     DOM.searchInput.value = actorName;
-
-    // 3. Trigger the search immediately
     performSearch();
-
-    // 4. Ensure we are on the search view
     navigateTo('search');
 };
 
@@ -368,10 +387,23 @@ window.openDetailModal = function(id) {
     // Logic to create clickable cast links
     const castHTML = item.cast.length > 0 
         ? item.cast.map(actor => 
-            // We escape single quotes just in case (e.g. O'Neal)
             `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`
           ).join(', ')
         : 'N/A';
+
+    // Logic for Episode Badges (Only for TV Shows)
+    let episodesHTML = '';
+    if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
+        const badges = item.episodes.map(e => `<div class="episode-badge">${e}</div>`).join('');
+        episodesHTML = `
+            <div class="episodes-container">
+                <h3 class="episodes-header">Seasons & Episodes</h3>
+                <div class="episodes-grid">
+                    ${badges}
+                </div>
+            </div>
+        `;
+    }
 
     let playButtonHTML = '';
     if (item.trailerUrl) {
@@ -381,7 +413,7 @@ window.openDetailModal = function(id) {
             </button>`;
     }
 
-    // UPDATED HTML Structure for Cinematic Blur Effect
+    // UPDATED HTML Structure with Subtitles and Episodes
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -397,6 +429,7 @@ window.openDetailModal = function(id) {
                     <span class="year">${item.year}</span>
                     <span class="meta-badge">${item.type}</span>
                     <span class="meta-badge">${item.language}</span>
+                    <span class="meta-badge subtitle-badge">${item.subtitle}</span>
                 </div>
             </div>
             
@@ -406,6 +439,8 @@ window.openDetailModal = function(id) {
                     <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
                 </button>
             </div>
+            
+            ${episodesHTML}
 
             <p class="modal-description">${item.synopsis}</p>
             
