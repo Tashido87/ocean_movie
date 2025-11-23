@@ -34,32 +34,44 @@ const state = {
 const DOM = {
     app: document.getElementById('app'),
     header: document.getElementById('main-header'),
+    logo: document.querySelector('.logo'), // NEW: Logo selector
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     mobileMenu: document.getElementById('mobile-menu'),
     searchInput: document.getElementById('search-input'),
     clearSearchBtn: document.getElementById('clear-search-btn'),
     navLinks: document.querySelectorAll('[data-page]'),
+    
+    // Views
     loadingScreen: document.getElementById('loading-screen'),
     errorScreen: document.getElementById('error-screen'),
     homeView: document.getElementById('home-view'),
     searchView: document.getElementById('search-view'),
     favoritesView: document.getElementById('favorites-view'),
+    
+    // Dynamic Content Areas
     heroBanner: document.getElementById('hero-banner'),
     contentRows: document.getElementById('content-rows'),
     searchResultsGrid: document.getElementById('search-results-grid'),
     favoritesGrid: document.getElementById('favorites-grid'),
     searchCount: document.getElementById('search-count'),
     favCountBadge: document.getElementById('fav-count-badge'),
+    
+    // Modals
     detailModal: document.getElementById('detail-modal'),
     modalBody: document.getElementById('modal-body-content'),
     closeDetailBtn: document.getElementById('close-detail-modal'),
     videoModal: document.getElementById('video-modal'),
     videoPlaceholder: document.getElementById('youtube-player-placeholder'),
     closeVideoBtn: document.getElementById('close-video-modal'),
+    
+    // Filters
     filterType: document.getElementById('filter-type'),
     filterYear: document.getElementById('filter-year'),
     filterGenre: document.getElementById('filter-genre'),
+    filterLanguage: document.getElementById('filter-language'), // NEW
     sortBy: document.getElementById('sort-by'),
+    
+    // Toast
     toast: document.getElementById('toast'),
     toastMessage: document.getElementById('toast-message'),
     retryBtn: document.getElementById('retry-btn')
@@ -166,7 +178,8 @@ function initApp() {
     
     updateFavCount();
     populateYearFilter();
-    populateGenreFilter(); 
+    populateGenreFilter();
+    populateLanguageFilter(); // NEW: Populate Languages
     
     renderHero();
     renderHomeRows();
@@ -180,7 +193,6 @@ function renderHero() {
 
     DOM.heroBanner.style.backgroundImage = `linear-gradient(to top, #141414, transparent 50%), linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 80%), url('${heroItem.posterUrl}')`;
     
-    // UPDATED: Use || 'N/A' to show N/A if rating is 0
     DOM.heroBanner.innerHTML = `
         <div class="hero-overlay">
             <div class="hero-content">
@@ -234,7 +246,6 @@ function createRow(title, items) {
 }
 
 function createCardHTML(item) {
-    // UPDATED: Use || 'N/A' for card display
     return `
         <div class="movie-card" onclick="openDetailModal('${item.id}')">
             <img src="${item.posterUrl}" alt="${item.title}" loading="lazy" onerror="this.src='${CONFIG.PLACEHOLDER_IMG}'">
@@ -266,9 +277,10 @@ const performSearch = debounce(() => {
     const typeFilter = DOM.filterType.value;
     const yearFilter = DOM.filterYear.value;
     const genreFilter = DOM.filterGenre.value;
+    const languageFilter = DOM.filterLanguage.value; // NEW
     const sortValue = DOM.sortBy.value;
 
-    if (!query && typeFilter === 'all' && yearFilter === 'all' && genreFilter === 'all') {
+    if (!query && typeFilter === 'all' && yearFilter === 'all' && genreFilter === 'all' && languageFilter === 'all') {
         if (state.currentView === 'search') navigateTo('home');
         return;
     }
@@ -286,8 +298,9 @@ const performSearch = debounce(() => {
         const isTypeMatch = typeFilter === 'all' || item.type === typeFilter;
         const isYearMatch = yearFilter === 'all' || item.year.toString() === yearFilter;
         const isGenreMatch = genreFilter === 'all' || item.genre.includes(genreFilter);
+        const isLanguageMatch = languageFilter === 'all' || item.language === languageFilter; // NEW
 
-        return isTextMatch && isTypeMatch && isYearMatch && isGenreMatch;
+        return isTextMatch && isTypeMatch && isYearMatch && isGenreMatch && isLanguageMatch;
     });
 
     if (sortValue === 'rating') {
@@ -336,7 +349,6 @@ function populateGenreFilter() {
     });
     
     const sortedGenres = [...allGenres].sort();
-    
     sortedGenres.forEach(genre => {
         if (genre) {
             const option = document.createElement('option');
@@ -344,6 +356,24 @@ function populateGenreFilter() {
             option.textContent = genre;
             DOM.filterGenre.appendChild(option);
         }
+    });
+}
+
+// NEW: Populate Languages
+function populateLanguageFilter() {
+    const allLanguages = new Set();
+    state.allContent.forEach(item => {
+        if (item.language && item.language !== 'Unknown') {
+            allLanguages.add(item.language);
+        }
+    });
+    
+    const sortedLangs = [...allLanguages].sort();
+    sortedLangs.forEach(lang => {
+        const option = document.createElement('option');
+        option.value = lang;
+        option.textContent = lang;
+        DOM.filterLanguage.appendChild(option);
     });
 }
 
@@ -414,7 +444,6 @@ window.openDetailModal = function(id) {
             </button>`;
     }
 
-    // UPDATED: Use || 'N/A' for rating display
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -567,6 +596,7 @@ function navigateToSearchPreFilter(type) {
     DOM.filterType.value = type;
     DOM.filterYear.value = 'all';
     DOM.filterGenre.value = 'all'; 
+    DOM.filterLanguage.value = 'all'; // Reset
     DOM.searchInput.value = '';
     
     const results = state.allContent.filter(item => item.type === type);
@@ -618,10 +648,19 @@ document.addEventListener('DOMContentLoaded', () => {
         navigateTo('home');
     });
     
+    // Filters
     DOM.filterType.addEventListener('change', performSearch);
     DOM.filterYear.addEventListener('change', performSearch);
     DOM.filterGenre.addEventListener('change', performSearch); 
+    DOM.filterLanguage.addEventListener('change', performSearch); // NEW
     DOM.sortBy.addEventListener('change', performSearch);
+
+    // NEW: Logo Click
+    if(DOM.logo) {
+        DOM.logo.addEventListener('click', () => {
+            navigateTo('home');
+        });
+    }
 
     DOM.navLinks.forEach(link => {
         link.addEventListener('click', (e) => {
