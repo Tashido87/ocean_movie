@@ -867,3 +867,25 @@ body {
     border-color: #f5c518; /* Yellow Border */
     font-weight: 600;
 }
+
+/* === NEW STYLES: RELATED CONTENT === */
+.related-section {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.related-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); /* Slightly smaller cards for related */
+    gap: 10px;
+}
+
+.related-grid .movie-card {
+    width: 100%;
+}
+
+.related-grid .movie-card img {
+    height: auto;
+    aspect-ratio: 2/3;
+}
