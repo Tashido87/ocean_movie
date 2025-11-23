@@ -823,3 +823,47 @@ body {
         height: 360px;
     }
 }
+
+/* === NEW STYLES: EPISODES LIST === */
+.episodes-container {
+    margin-bottom: 25px;
+    padding-top: 5px;
+    border-top: 1px solid #333;
+}
+
+.episodes-header {
+    font-size: 1rem;
+    color: #e5e5e5;
+    margin: 15px 0 10px 0;
+    font-weight: 600;
+}
+
+.episodes-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.episode-badge {
+    background-color: #2f2f2f;
+    color: #ccc;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    border: 1px solid #444;
+    transition: all 0.2s ease;
+    cursor: default;
+}
+
+.episode-badge:hover {
+    background-color: #444;
+    color: white;
+    border-color: #666;
+}
+
+/* === NEW STYLES: SUBTITLE BADGE === */
+.subtitle-badge {
+    color: #f5c518; /* Yellow Color */
+    border-color: #f5c518; /* Yellow Border */
+    font-weight: 600;
+}
