@@ -1,1 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShowCase | Movie & TV Catalog</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
 
+    <div id="app">
+        
+        <header id="main-header" class="header">
+            <div class="header-container">
+                <div class="logo">
+                    <h1>SHOWCASE</h1>
+                </div>
+                
+                <div class="search-container">
+                    <div class="search-box">
+                        <i class="fa-solid fa-search search-icon"></i>
+                        <input type="text" id="search-input" placeholder="Titles, people, genres...">
+                        <i class="fa-solid fa-times clear-search hidden" id="clear-search-btn"></i>
+                    </div>
+                </div>
+
+                <nav class="desktop-nav">
+                    <ul class="nav-links">
+                        <li class="active" data-page="home">Home</li>
+                        <li data-page="movies">Movies</li>
+                        <li data-page="tv">TV Shows</li>
+                        <li data-page="favorites">My List <span id="fav-count-badge" class="hidden">0</span></li>
+                    </ul>
+                </nav>
+
+                <div class="mobile-menu-toggle" id="mobile-menu-btn">
+                    <i class="fa-solid fa-bars"></i>
+                </div>
+            </div>
+
+            <div class="mobile-menu hidden" id="mobile-menu">
+                <ul class="mobile-nav-links">
+                    <li class="active" data-page="home">Home</li>
+                    <li data-page="movies">Movies</li>
+                    <li data-page="tv">TV Shows</li>
+                    <li data-page="favorites">My List</li>
+                </ul>
+            </div>
+        </header>
+
+        <main id="main-content">
+            
+            <div id="loading-screen" class="loading-screen">
+                <div class="spinner"></div>
+                <p>Loading Catalog...</p>
+            </div>
+
+            <div id="error-screen" class="error-screen hidden">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <h2>Unable to load content</h2>
+                <p>Please check your internet connection or configuration.</p>
+                <button id="retry-btn" class="primary-btn">Retry</button>
+            </div>
+
+            <div id="home-view" class="view-container">
+                <section id="hero-banner" class="hero-banner">
+                    <div class="hero-skeleton"></div>
+                </section>
+
+                <div id="content-rows" class="rows-container">
+                    </div>
+            </div>
+
+            <div id="search-view" class="view-container hidden">
+                <div class="section-header">
+                    <h2>Search Results <span id="search-count" class="text-muted"></span></h2>
+                    
+                    <div class="filters-bar">
+                        <select id="filter-type">
+                            <option value="all">All Types</option>
+                            <option value="Movie">Movies</option>
+                            <option value="TV Show">TV Shows</option>
+                        </select>
+                        <select id="filter-year">
+                            <option value="all">Any Year</option>
+                            </select>
+                    </div>
+                </div>
+                <div id="search-results-grid" class="media-grid">
+                    </div>
+            </div>
+
+            <div id="favorites-view" class="view-container hidden">
+                <div class="section-header">
+                    <h2>My List</h2>
+                    <button id="clear-favorites" class="text-btn">Clear All</button>
+                </div>
+                <div id="favorites-grid" class="media-grid">
+                    </div>
+                <div id="no-favorites-msg" class="empty-state hidden">
+                    <i class="fa-regular fa-heart"></i>
+                    <p>You haven't added any titles to your list yet.</p>
+                </div>
+            </div>
+
+        </main>
+
+        <footer class="footer">
+            <p>Designed for Portfolio Demo</p>
+            <p class="copyright">&copy; 2025 ShowCase Catalog</p>
+        </footer>
+
+    </div>
+
+    <div id="detail-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <button class="close-modal-btn" id="close-detail-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            
+            <div class="modal-body" id="modal-body-content">
+                </div>
+        </div>
+    </div>
+
+    <div id="video-modal" class="modal-backdrop hidden">
+        <div class="video-modal-content">
+            <button class="close-modal-btn" id="close-video-modal">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            <div class="video-container">
+                <div id="youtube-player-placeholder"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast hidden">
+        <span id="toast-message">Action completed</span>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
