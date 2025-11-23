@@ -19,7 +19,6 @@ const CONFIG = {
         TV: 'TV_Shows'
     },
     IMAGE_BASE_URL: 'https://image.tmdb.org/t/p/w500', 
-    // Fallback image (using placehold.co since via.placeholder is down)
     PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster'
 };
 
@@ -27,7 +26,7 @@ const CONFIG = {
 const state = {
     allContent: [],
     favorites: JSON.parse(localStorage.getItem('showcase_favorites')) || [],
-    currentView: 'home', // 'home', 'search', 'favorites', 'movies', 'tv'
+    currentView: 'home', 
     isLoading: true
 };
 
@@ -40,44 +39,34 @@ const DOM = {
     searchInput: document.getElementById('search-input'),
     clearSearchBtn: document.getElementById('clear-search-btn'),
     navLinks: document.querySelectorAll('[data-page]'),
-    
-    // Views
     loadingScreen: document.getElementById('loading-screen'),
     errorScreen: document.getElementById('error-screen'),
     homeView: document.getElementById('home-view'),
     searchView: document.getElementById('search-view'),
     favoritesView: document.getElementById('favorites-view'),
-    
-    // Dynamic Content Areas
     heroBanner: document.getElementById('hero-banner'),
     contentRows: document.getElementById('content-rows'),
     searchResultsGrid: document.getElementById('search-results-grid'),
     favoritesGrid: document.getElementById('favorites-grid'),
     searchCount: document.getElementById('search-count'),
     favCountBadge: document.getElementById('fav-count-badge'),
-    
-    // Modals
     detailModal: document.getElementById('detail-modal'),
     modalBody: document.getElementById('modal-body-content'),
     closeDetailBtn: document.getElementById('close-detail-modal'),
     videoModal: document.getElementById('video-modal'),
     videoPlaceholder: document.getElementById('youtube-player-placeholder'),
     closeVideoBtn: document.getElementById('close-video-modal'),
-    
-    // Filters
     filterType: document.getElementById('filter-type'),
     filterYear: document.getElementById('filter-year'),
-    filterGenre: document.getElementById('filter-genre'), // NEW
-    sortBy: document.getElementById('sort-by'),           // NEW
-    
-    // Toast
+    filterGenre: document.getElementById('filter-genre'),
+    sortBy: document.getElementById('sort-by'),
     toast: document.getElementById('toast'),
     toastMessage: document.getElementById('toast-message'),
     retryBtn: document.getElementById('retry-btn')
 };
 
 // =========================================
-// 2. DATA FETCHING (Google Sheets API)
+// 2. DATA FETCHING
 // =========================================
 
 async function fetchSheetData(sheetName) {
@@ -177,7 +166,7 @@ function initApp() {
     
     updateFavCount();
     populateYearFilter();
-    populateGenreFilter(); // NEW: Populate genres
+    populateGenreFilter(); 
     
     renderHero();
     renderHomeRows();
@@ -274,8 +263,8 @@ const performSearch = debounce(() => {
     const query = DOM.searchInput.value.toLowerCase().trim();
     const typeFilter = DOM.filterType.value;
     const yearFilter = DOM.filterYear.value;
-    const genreFilter = DOM.filterGenre.value; // NEW
-    const sortValue = DOM.sortBy.value;        // NEW
+    const genreFilter = DOM.filterGenre.value;
+    const sortValue = DOM.sortBy.value;
 
     if (!query && typeFilter === 'all' && yearFilter === 'all' && genreFilter === 'all') {
         if (state.currentView === 'search') navigateTo('home');
@@ -285,7 +274,6 @@ const performSearch = debounce(() => {
     navigateTo('search');
     DOM.clearSearchBtn.classList.remove('hidden');
 
-    // 1. Filter
     let results = state.allContent.filter(item => {
         const matchTitle = item.title.toLowerCase().includes(query);
         const matchCast = item.cast.some(actor => actor.toLowerCase().includes(query));
@@ -295,20 +283,16 @@ const performSearch = debounce(() => {
         const isTextMatch = matchTitle || matchCast || matchDirector || matchGenreText;
         const isTypeMatch = typeFilter === 'all' || item.type === typeFilter;
         const isYearMatch = yearFilter === 'all' || item.year.toString() === yearFilter;
-        
-        // NEW: Check if item has the selected genre
         const isGenreMatch = genreFilter === 'all' || item.genre.includes(genreFilter);
 
         return isTextMatch && isTypeMatch && isYearMatch && isGenreMatch;
     });
 
-    // 2. Sort
     if (sortValue === 'rating') {
         results.sort((a, b) => b.imdb - a.imdb);
     } else if (sortValue === 'year') {
         results.sort((a, b) => parseInt(b.year) - parseInt(a.year));
     } 
-    // 'recent' relies on the array order, which is randomized at load, so we leave it alone.
 
     renderGrid(DOM.searchResultsGrid, results);
     DOM.searchCount.textContent = `(${results.length})`;
@@ -343,14 +327,12 @@ function populateYearFilter() {
     });
 }
 
-// NEW: Populate Genres Dynamically
 function populateGenreFilter() {
     const allGenres = new Set();
     state.allContent.forEach(item => {
         item.genre.forEach(g => allGenres.add(g));
     });
     
-    // Sort alphabetically
     const sortedGenres = [...allGenres].sort();
     
     sortedGenres.forEach(genre => {
@@ -376,6 +358,9 @@ window.searchByCast = function(name) {
 };
 
 window.openDetailModal = function(id) {
+    // FIX 3: Reset scroll to top when opening a movie (even related ones)
+    DOM.detailModal.scrollTop = 0;
+
     const item = state.allContent.find(i => i.id === id);
     if (!item) return;
 
@@ -401,13 +386,10 @@ window.openDetailModal = function(id) {
             </div>`;
     }
 
-    // NEW: Related Content Logic
-    // Find items with at least one matching genre, exclude current item
     let relatedItems = state.allContent.filter(other => 
         other.id !== item.id && 
         other.genre.some(g => item.genre.includes(g))
     );
-    // Shuffle and pick top 6
     relatedItems = relatedItems.sort(() => 0.5 - Math.random()).slice(0, 6);
     
     let relatedHTML = '';
@@ -582,7 +564,7 @@ function navigateToSearchPreFilter(type) {
     DOM.searchView.classList.remove('hidden');
     DOM.filterType.value = type;
     DOM.filterYear.value = 'all';
-    DOM.filterGenre.value = 'all'; // Reset genre
+    DOM.filterGenre.value = 'all'; 
     DOM.searchInput.value = '';
     
     const results = state.allContent.filter(item => item.type === type);
@@ -634,11 +616,10 @@ document.addEventListener('DOMContentLoaded', () => {
         navigateTo('home');
     });
     
-    // Add event listeners for new filters
     DOM.filterType.addEventListener('change', performSearch);
     DOM.filterYear.addEventListener('change', performSearch);
-    DOM.filterGenre.addEventListener('change', performSearch); // NEW
-    DOM.sortBy.addEventListener('change', performSearch);      // NEW
+    DOM.filterGenre.addEventListener('change', performSearch); 
+    DOM.sortBy.addEventListener('change', performSearch);
 
     DOM.navLinks.forEach(link => {
         link.addEventListener('click', (e) => {
