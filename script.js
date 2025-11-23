@@ -67,6 +67,8 @@ const DOM = {
     // Filters
     filterType: document.getElementById('filter-type'),
     filterYear: document.getElementById('filter-year'),
+    filterGenre: document.getElementById('filter-genre'), // NEW
+    sortBy: document.getElementById('sort-by'),           // NEW
     
     // Toast
     toast: document.getElementById('toast'),
@@ -91,27 +93,15 @@ async function fetchSheetData(sheetName) {
     }
 }
 
-/**
- * HELPER: Fixes raw URLs and Bypasses Hotlink Protection.
- */
 function processPosterUrl(url) {
     if (!url) return CONFIG.PLACEHOLDER_IMG;
-    
     let cleanUrl = url.trim();
-
-    // 1. Fix the URL Format (HTML -> JPG)
     if (cleanUrl.includes('impawards.com') && cleanUrl.endsWith('.html')) {
-        cleanUrl = cleanUrl.replace(
-            /impawards\.com\/(\d{4})\/(.+)\.html/i, 
-            'impawards.com/$1/posters/$2.jpg'
-        );
+        cleanUrl = cleanUrl.replace(/impawards\.com\/(\d{4})\/(.+)\.html/i, 'impawards.com/$1/posters/$2.jpg');
     }
-
-    // 2. Bypass Hotlink Protection (403 Error)
     if (cleanUrl.includes('impawards.com')) {
         return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}`;
     }
-
     return cleanUrl;
 }
 
@@ -122,25 +112,22 @@ async function loadAllContent() {
             fetchSheetData(CONFIG.SHEETS.TV)
         ]);
 
-        // Helper: Check if row has data (Title OR Year must exist)
         const isValidRow = (row) => {
             const hasTitle = row[0] && row[0].trim() !== '';
             const hasYear = row[1] && row[1].trim() !== '';
-            return hasTitle || hasYear; // Keep if EITHER exists
+            return hasTitle || hasYear; 
         };
 
-        // Helper to parse rows
         const parseRow = (row, type) => {
-            // Determine Subtitle Status
             let isBurmese = false;
-            
+            let directorName = '';
+
             if (type === 'Movie') {
-                // Movies: Check Column J (Index 9)
                 isBurmese = (row[9] === 'TRUE');
+                directorName = row[10] || '';
             } else {
-                // TV Shows: Check Column L (Index 11)
-                // We use safe access (row[11]) in case the row is short
                 isBurmese = (row[11] === 'TRUE');
+                directorName = row[12] || '';
             }
 
             const subtitleText = isBurmese ? 'Burmese Subtitle' : 'English Subtitle';
@@ -156,26 +143,17 @@ async function loadAllContent() {
                 imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
                 posterUrl: processPosterUrl(row[7]),
                 trailerUrl: row[8] || '',
-                // Episodes (TV Only) - Column J (Index 9)
                 episodes: (type === 'TV Show' && row[9]) ? row[9].split('\n').filter(s => s.trim() !== '') : [],
-                subtitle: subtitleText, // Store the determined subtitle
+                subtitle: subtitleText,
+                director: directorName,
                 type: type
             };
         };
 
-        // Process Movies (Filter empty rows -> Map to objects)
-        const movies = moviesRaw.slice(1)
-            .filter(isValidRow) 
-            .map(row => parseRow(row, 'Movie'));
-        
-        // Process TV Shows (Filter empty rows -> Map to objects)
-        const tvShows = tvShowsRaw.slice(1)
-            .filter(isValidRow)
-            .map(row => parseRow(row, 'TV Show'));
+        const movies = moviesRaw.slice(1).filter(isValidRow).map(row => parseRow(row, 'Movie'));
+        const tvShows = tvShowsRaw.slice(1).filter(isValidRow).map(row => parseRow(row, 'TV Show'));
 
         state.allContent = [...movies, ...tvShows];
-        
-        // Randomize order slightly
         state.allContent.sort(() => Math.random() - 0.5);
 
         initApp();
@@ -199,13 +177,13 @@ function initApp() {
     
     updateFavCount();
     populateYearFilter();
+    populateGenreFilter(); // NEW: Populate genres
     
     renderHero();
     renderHomeRows();
 }
 
 function renderHero() {
-    // Pick a high-rated item for the hero (IMDB > 7.5)
     const candidates = state.allContent.filter(item => item.imdb > 7.5 && item.posterUrl.startsWith('http'));
     const heroItem = candidates[Math.floor(Math.random() * candidates.length)] || state.allContent[0];
 
@@ -239,8 +217,6 @@ function renderHero() {
 
 function renderHomeRows() {
     DOM.contentRows.innerHTML = '';
-
-    // Define Categories
     const categories = [
         { title: 'Recently Added', filter: item => true, limit: 10 },
         { title: 'Trending Movies', filter: item => item.type === 'Movie' && item.imdb >= 7.0, limit: 10 },
@@ -262,16 +238,8 @@ function renderHomeRows() {
 function createRow(title, items) {
     const rowDiv = document.createElement('div');
     rowDiv.className = 'category-row';
-    
     const sliderHTML = items.map(item => createCardHTML(item)).join('');
-    
-    rowDiv.innerHTML = `
-        <h3 class="row-header">${title}</h3>
-        <div class="row-slider">
-            ${sliderHTML}
-        </div>
-    `;
-    
+    rowDiv.innerHTML = `<h3 class="row-header">${title}</h3><div class="row-slider">${sliderHTML}</div>`;
     DOM.contentRows.appendChild(rowDiv);
 }
 
@@ -294,7 +262,6 @@ function createCardHTML(item) {
 // 4. SEARCH & FILTERING
 // =========================================
 
-// Debounce Utility
 function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -307,8 +274,10 @@ const performSearch = debounce(() => {
     const query = DOM.searchInput.value.toLowerCase().trim();
     const typeFilter = DOM.filterType.value;
     const yearFilter = DOM.filterYear.value;
+    const genreFilter = DOM.filterGenre.value; // NEW
+    const sortValue = DOM.sortBy.value;        // NEW
 
-    if (!query && typeFilter === 'all' && yearFilter === 'all') {
+    if (!query && typeFilter === 'all' && yearFilter === 'all' && genreFilter === 'all') {
         if (state.currentView === 'search') navigateTo('home');
         return;
     }
@@ -316,21 +285,30 @@ const performSearch = debounce(() => {
     navigateTo('search');
     DOM.clearSearchBtn.classList.remove('hidden');
 
-    const results = state.allContent.filter(item => {
-        // Text Match
+    // 1. Filter
+    let results = state.allContent.filter(item => {
         const matchTitle = item.title.toLowerCase().includes(query);
         const matchCast = item.cast.some(actor => actor.toLowerCase().includes(query));
-        const matchGenre = item.genre.some(g => g.toLowerCase().includes(query));
-        const isTextMatch = matchTitle || matchCast || matchGenre;
-
-        // Type Filter
+        const matchDirector = item.director && item.director.toLowerCase().includes(query);
+        const matchGenreText = item.genre.some(g => g.toLowerCase().includes(query));
+        
+        const isTextMatch = matchTitle || matchCast || matchDirector || matchGenreText;
         const isTypeMatch = typeFilter === 'all' || item.type === typeFilter;
-
-        // Year Filter
         const isYearMatch = yearFilter === 'all' || item.year.toString() === yearFilter;
+        
+        // NEW: Check if item has the selected genre
+        const isGenreMatch = genreFilter === 'all' || item.genre.includes(genreFilter);
 
-        return isTextMatch && isTypeMatch && isYearMatch;
+        return isTextMatch && isTypeMatch && isYearMatch && isGenreMatch;
     });
+
+    // 2. Sort
+    if (sortValue === 'rating') {
+        results.sort((a, b) => b.imdb - a.imdb);
+    } else if (sortValue === 'year') {
+        results.sort((a, b) => parseInt(b.year) - parseInt(a.year));
+    } 
+    // 'recent' relies on the array order, which is randomized at load, so we leave it alone.
 
     renderGrid(DOM.searchResultsGrid, results);
     DOM.searchCount.textContent = `(${results.length})`;
@@ -365,15 +343,34 @@ function populateYearFilter() {
     });
 }
 
+// NEW: Populate Genres Dynamically
+function populateGenreFilter() {
+    const allGenres = new Set();
+    state.allContent.forEach(item => {
+        item.genre.forEach(g => allGenres.add(g));
+    });
+    
+    // Sort alphabetically
+    const sortedGenres = [...allGenres].sort();
+    
+    sortedGenres.forEach(genre => {
+        if (genre) {
+            const option = document.createElement('option');
+            option.value = genre;
+            option.textContent = genre;
+            DOM.filterGenre.appendChild(option);
+        }
+    });
+}
+
 // =========================================
 // 5. DETAIL MODAL & INTERACTIONS
 // =========================================
 
-// Function to handle clicking a cast member
-window.searchByCast = function(actorName) {
+window.searchByCast = function(name) {
     DOM.detailModal.classList.add('hidden');
     document.body.style.overflow = '';
-    DOM.searchInput.value = actorName;
+    DOM.searchInput.value = name;
     performSearch();
     navigateTo('search');
 };
@@ -384,22 +381,43 @@ window.openDetailModal = function(id) {
 
     const isFav = state.favorites.includes(item.id);
     
-    // Logic to create clickable cast links
     const castHTML = item.cast.length > 0 
         ? item.cast.map(actor => 
             `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`
           ).join(', ')
         : 'N/A';
 
-    // Logic for Episode Badges (Only for TV Shows)
+    const directorHTML = item.director 
+        ? `<span class="cast-link" onclick="searchByCast('${item.director.replace(/'/g, "\\'")}')">${item.director}</span>`
+        : 'N/A';
+
     let episodesHTML = '';
     if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
         const badges = item.episodes.map(e => `<div class="episode-badge">${e}</div>`).join('');
         episodesHTML = `
             <div class="episodes-container">
                 <h3 class="episodes-header">Seasons & Episodes</h3>
-                <div class="episodes-grid">
-                    ${badges}
+                <div class="episodes-grid">${badges}</div>
+            </div>`;
+    }
+
+    // NEW: Related Content Logic
+    // Find items with at least one matching genre, exclude current item
+    let relatedItems = state.allContent.filter(other => 
+        other.id !== item.id && 
+        other.genre.some(g => item.genre.includes(g))
+    );
+    // Shuffle and pick top 6
+    relatedItems = relatedItems.sort(() => 0.5 - Math.random()).slice(0, 6);
+    
+    let relatedHTML = '';
+    if (relatedItems.length > 0) {
+        const cardsHTML = relatedItems.map(r => createCardHTML(r)).join('');
+        relatedHTML = `
+            <div class="related-section">
+                <h3 class="episodes-header">More Like This</h3>
+                <div class="related-grid">
+                    ${cardsHTML}
                 </div>
             </div>
         `;
@@ -413,7 +431,6 @@ window.openDetailModal = function(id) {
             </button>`;
     }
 
-    // UPDATED HTML Structure with Subtitles and Episodes
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -448,8 +465,13 @@ window.openDetailModal = function(id) {
                 <span>Cast:</span> ${castHTML}
             </div>
             <div class="modal-detail-list">
+                <span>Director:</span> ${directorHTML}
+            </div>
+            <div class="modal-detail-list">
                 <span>Genres:</span> ${item.genre.join(', ')}
             </div>
+            
+            ${relatedHTML}
         </div>
     `;
 
@@ -478,7 +500,6 @@ window.toggleFavorite = function(id, btnElement) {
             loadFavoritesPage();
         }
     }
-    
     localStorage.setItem('showcase_favorites', JSON.stringify(state.favorites));
     updateFavCount();
 };
@@ -496,22 +517,19 @@ function updateFavCount() {
 
 window.openVideoPlayer = function(url) {
     if (!url) return;
-    
     const videoId = extractYouTubeID(url);
     if (!videoId) {
         showToast('Trailer not available');
         return;
     }
-
     const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
     DOM.videoPlaceholder.innerHTML = `<iframe src="${embedUrl}" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
-    
     DOM.videoModal.classList.remove('hidden');
 };
 
 function closeVideoPlayer() {
     DOM.videoModal.classList.add('hidden');
-    DOM.videoPlaceholder.innerHTML = ''; // Stop video
+    DOM.videoPlaceholder.innerHTML = ''; 
 }
 
 function extractYouTubeID(url) {
@@ -526,22 +544,16 @@ function extractYouTubeID(url) {
 
 function navigateTo(pageName) {
     state.currentView = pageName;
-    
-    // Hide all views
     DOM.homeView.classList.add('hidden');
     DOM.searchView.classList.add('hidden');
     DOM.favoritesView.classList.add('hidden');
     
-    // Update Nav Active State
     DOM.navLinks.forEach(link => {
         if (link.dataset.page === pageName) link.classList.add('active');
         else link.classList.remove('active');
     });
-
-    // Mobile menu reset
     DOM.mobileMenu.classList.add('hidden');
 
-    // Show selected view
     switch(pageName) {
         case 'home':
             DOM.homeView.classList.remove('hidden');
@@ -562,7 +574,6 @@ function navigateTo(pageName) {
             DOM.searchView.classList.remove('hidden');
             break;
     }
-    
     window.scrollTo(0, 0);
 }
 
@@ -571,6 +582,7 @@ function navigateToSearchPreFilter(type) {
     DOM.searchView.classList.remove('hidden');
     DOM.filterType.value = type;
     DOM.filterYear.value = 'all';
+    DOM.filterGenre.value = 'all'; // Reset genre
     DOM.searchInput.value = '';
     
     const results = state.allContent.filter(item => item.type === type);
@@ -587,7 +599,6 @@ function navigateToSearchPreFilter(type) {
 function loadFavoritesPage() {
     const favItems = state.allContent.filter(item => state.favorites.includes(item.id));
     const noFavMsg = document.getElementById('no-favorites-msg');
-    
     if (favItems.length === 0) {
         DOM.favoritesGrid.innerHTML = '';
         noFavMsg.classList.remove('hidden');
@@ -615,19 +626,19 @@ function showErrorState() {
 // =========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    
     loadAllContent();
-
     DOM.searchInput.addEventListener('input', performSearch);
-    
     DOM.clearSearchBtn.addEventListener('click', () => {
         DOM.searchInput.value = '';
         performSearch();
         navigateTo('home');
     });
-
+    
+    // Add event listeners for new filters
     DOM.filterType.addEventListener('change', performSearch);
     DOM.filterYear.addEventListener('change', performSearch);
+    DOM.filterGenre.addEventListener('change', performSearch); // NEW
+    DOM.sortBy.addEventListener('change', performSearch);      // NEW
 
     DOM.navLinks.forEach(link => {
         link.addEventListener('click', (e) => {
@@ -635,29 +646,23 @@ document.addEventListener('DOMContentLoaded', () => {
             navigateTo(page);
         });
     });
-
     DOM.mobileMenuBtn.addEventListener('click', () => {
         DOM.mobileMenu.classList.toggle('hidden');
     });
-
     DOM.closeDetailBtn.addEventListener('click', () => {
         DOM.detailModal.classList.add('hidden');
         document.body.style.overflow = '';
     });
-
     DOM.detailModal.addEventListener('click', (e) => {
         if (e.target === DOM.detailModal) {
             DOM.detailModal.classList.add('hidden');
             document.body.style.overflow = '';
         }
     });
-
     DOM.closeVideoBtn.addEventListener('click', closeVideoPlayer);
-    
     DOM.videoModal.addEventListener('click', (e) => {
         if (e.target === DOM.videoModal) closeVideoPlayer();
     });
-
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             DOM.detailModal.classList.add('hidden');
@@ -665,7 +670,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.style.overflow = '';
         }
     });
-    
     document.getElementById('clear-favorites').addEventListener('click', () => {
         if(confirm('Are you sure you want to clear your list?')) {
             state.favorites = [];
@@ -674,7 +678,6 @@ document.addEventListener('DOMContentLoaded', () => {
             loadFavoritesPage();
         }
     });
-
     DOM.retryBtn.addEventListener('click', () => {
         DOM.errorScreen.classList.add('hidden');
         DOM.loadingScreen.classList.remove('hidden');
