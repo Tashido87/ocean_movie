@@ -180,12 +180,13 @@ function renderHero() {
 
     DOM.heroBanner.style.backgroundImage = `linear-gradient(to top, #141414, transparent 50%), linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 80%), url('${heroItem.posterUrl}')`;
     
+    // UPDATED: Use || 'N/A' to show N/A if rating is 0
     DOM.heroBanner.innerHTML = `
         <div class="hero-overlay">
             <div class="hero-content">
                 <h1 class="hero-title">${heroItem.title}</h1>
                 <div class="hero-meta">
-                    <span class="imdb-score">IMDB ${heroItem.imdb}</span>
+                    <span class="imdb-score">IMDB ${heroItem.imdb || 'N/A'}</span>
                     <span>${heroItem.year}</span>
                     <span class="meta-badge">${heroItem.type}</span>
                     <span class="meta-badge subtitle-badge">${heroItem.subtitle}</span>
@@ -233,6 +234,7 @@ function createRow(title, items) {
 }
 
 function createCardHTML(item) {
+    // UPDATED: Use || 'N/A' for card display
     return `
         <div class="movie-card" onclick="openDetailModal('${item.id}')">
             <img src="${item.posterUrl}" alt="${item.title}" loading="lazy" onerror="this.src='${CONFIG.PLACEHOLDER_IMG}'">
@@ -240,7 +242,7 @@ function createCardHTML(item) {
                 <div class="card-title">${item.title}</div>
                 <div class="card-meta">
                     <span>${item.year}</span>
-                    <span><i class="fa-solid fa-star" style="color: gold; font-size: 0.6rem;"></i> ${item.imdb}</span>
+                    <span><i class="fa-solid fa-star" style="color: gold; font-size: 0.6rem;"></i> ${item.imdb || 'N/A'}</span>
                 </div>
             </div>
         </div>
@@ -358,7 +360,6 @@ window.searchByCast = function(name) {
 };
 
 window.openDetailModal = function(id) {
-    // FIX 3: Reset scroll to top when opening a movie (even related ones)
     DOM.detailModal.scrollTop = 0;
 
     const item = state.allContent.find(i => i.id === id);
@@ -413,6 +414,7 @@ window.openDetailModal = function(id) {
             </button>`;
     }
 
+    // UPDATED: Use || 'N/A' for rating display
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -424,7 +426,7 @@ window.openDetailModal = function(id) {
             <div class="modal-header-row">
                 <h2>${item.title}</h2>
                 <div class="modal-meta-tags">
-                    <span class="imdb-score">IMDB ${item.imdb}</span>
+                    <span class="imdb-score">IMDB ${item.imdb || 'N/A'}</span>
                     <span class="year">${item.year}</span>
                     <span class="meta-badge">${item.type}</span>
                     <span class="meta-badge">${item.language}</span>
