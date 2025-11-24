@@ -86,15 +86,17 @@ body {
     width: 100%;
     max-width: 1800px;
     margin: 0 auto;
+    gap: 15px; /* Added gap to prevent overlap on mobile */
 }
 
 .logo h1 {
     color: var(--primary-red);
-    font-size: 1.5rem;
+    font-size: 1.2rem; /* Reduced slightly for mobile safety */
     font-weight: 700;
     letter-spacing: 1px;
     text-transform: uppercase;
     cursor: pointer;
+    white-space: nowrap; /* Prevent breaking */
 }
 
 /* Desktop Nav */
@@ -125,7 +127,7 @@ body {
     flex-grow: 1;
     display: flex;
     justify-content: flex-end;
-    margin-right: 15px;
+    margin-right: 0;
 }
 
 .search-box {
@@ -137,7 +139,7 @@ body {
     padding: 5px 10px;
     border-radius: 4px; 
     width: 100%;
-    max-width: 300px; /* Increased slightly for AI badge space */
+    max-width: 300px; 
 }
 
 .search-icon {
@@ -149,23 +151,14 @@ body {
     background: transparent;
     border: none;
     color: white;
-    padding: 5px 10px 5px 10px;
+    padding: 5px 10px;
     width: 100%;
     outline: none;
     font-size: 0.9rem;
-    padding-right: 30px; /* Make room for AI badge */
+    padding-right: 10px; /* Reduced since badge is gone */
 }
 
-/* NEW: AI Badge inside search input */
-.ai-badge {
-    position: absolute;
-    right: 35px; /* Left of the clear 'X' button */
-    color: var(--primary-red);
-    font-size: 0.7rem;
-    font-weight: 800;
-    pointer-events: none;
-    opacity: 0.8;
-}
+/* Removed AI Badge CSS */
 
 .clear-search {
     cursor: pointer;
@@ -215,14 +208,13 @@ body {
 }
 
 /* =========================================
-   3. Main Content & Hero (SLIDER UPDATED)
+   3. Main Content & Hero (SLIDER UPDATED TO SLIDE TRANSITION)
    ========================================= */
 #main-content {
     padding-top: var(--header-height);
     min-height: 100vh;
 }
 
-/* Hero Wrapper (Replaces single static banner) */
 .hero-wrapper {
     position: relative;
     height: 50vh; 
@@ -231,7 +223,7 @@ body {
     overflow: hidden;
 }
 
-/* Individual Slides */
+/* Individual Slides - Updated for SLIDE Effect */
 .hero-slide {
     position: absolute;
     top: 0;
@@ -243,13 +235,23 @@ body {
     background-repeat: no-repeat;
     display: flex;
     align-items: flex-end;
-    opacity: 0;
-    transition: opacity 1s ease-in-out;
+    
+    /* SLIDE TRANSITION LOGIC */
+    transform: translateX(100%); /* Wait off-screen to the right */
+    transition: transform 0.8s ease-in-out; 
     z-index: 1;
+    opacity: 1; /* Always visible to browser, just moved off screen */
 }
 
+/* The active slide moves to center and sits on top */
 .hero-slide.active {
-    opacity: 1;
+    transform: translateX(0);
+    z-index: 5; 
+}
+
+/* The previous slide stays in place momentarily while new one slides over it */
+.hero-slide.last-active {
+    transform: translateX(0);
     z-index: 2;
 }
 
@@ -281,7 +283,7 @@ body {
     transform: scale(1.2);
 }
 
-/* Overlay and Content (Shared by all slides) */
+/* Overlay and Content */
 .hero-overlay {
     width: 100%;
     height: 100%;
@@ -295,7 +297,9 @@ body {
 
 .hero-content {
     max-width: 800px;
-    animation: fadeContent 1s ease-out; /* Subtle fade for text on slide change */
+    /* Optional: Fade content in slightly after slide */
+    opacity: 0; 
+    animation: fadeContent 0.5s ease-out 0.4s forwards;
 }
 
 @keyframes fadeContent {
@@ -948,27 +952,7 @@ body {
     to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* NEW: Admin Floating Button */
-.admin-link {
-    position: fixed;
-    bottom: 15px;
-    right: 15px;
-    background: rgba(20, 20, 20, 0.8);
-    color: #555;
-    padding: 8px 12px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    text-decoration: none;
-    z-index: 9999;
-    border: 1px solid #333;
-    transition: all 0.3s;
-}
-
-.admin-link:hover {
-    color: white;
-    background: var(--primary-red);
-    border-color: var(--primary-red);
-}
+/* Removed Admin Floating Button CSS */
 
 /* =========================================
    8. Media Queries (Desktop)
@@ -990,6 +974,11 @@ body {
     
     .header-container {
         justify-content: flex-start;
+        gap: 0; /* Reset gap for desktop */
+    }
+    
+    .logo h1 {
+        font-size: 1.5rem; /* Restore normal size */
     }
 
     .search-container {
