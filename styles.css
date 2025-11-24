@@ -2,7 +2,6 @@
    1. Variables & Reset
    ========================================= */
 :root {
-    /* Colors */
     --bg-main: #141414;
     --bg-card: #1f1f1f;
     --bg-overlay: rgba(0, 0, 0, 0.7);
@@ -12,16 +11,13 @@
     --text-muted: #b3b3b3;
     --border-color: #333;
 
-    /* Typography */
     --font-main: 'Inter', sans-serif;
     
-    /* Spacing & Sizes */
     --header-height: 60px;
     --border-radius: 4px;
     --container-padding: 4%;
     --transition-speed: 0.3s;
 
-    /* Z-Index Layers */
     --z-header: 100;
     --z-modal: 1000;
     --z-toast: 2000;
@@ -42,21 +38,18 @@ body {
     overflow-x: hidden;
 }
 
-/* Custom Scrollbar for Webkit */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
-
 ::-webkit-scrollbar-track {
     background: var(--bg-main);
 }
-
 ::-webkit-scrollbar-thumb {
     background: #444;
     border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
@@ -86,17 +79,17 @@ body {
     width: 100%;
     max-width: 1800px;
     margin: 0 auto;
-    gap: 15px; /* Added gap to prevent overlap on mobile */
+    gap: 15px; 
 }
 
 .logo h1 {
     color: var(--primary-red);
-    font-size: 1.2rem; /* Reduced slightly for mobile safety */
+    font-size: 1.2rem; 
     font-weight: 700;
     letter-spacing: 1px;
     text-transform: uppercase;
     cursor: pointer;
-    white-space: nowrap; /* Prevent breaking */
+    white-space: nowrap; 
 }
 
 /* Desktop Nav */
@@ -155,10 +148,8 @@ body {
     width: 100%;
     outline: none;
     font-size: 0.9rem;
-    padding-right: 10px; /* Reduced since badge is gone */
+    padding-right: 10px; 
 }
-
-/* Removed AI Badge CSS */
 
 .clear-search {
     cursor: pointer;
@@ -173,7 +164,6 @@ body {
     display: block;
 }
 
-/* Mobile Dropdown */
 .mobile-menu {
     position: fixed;
     top: var(--header-height);
@@ -196,7 +186,6 @@ body {
     cursor: pointer;
 }
 
-/* Badge */
 #fav-count-badge {
     background-color: var(--primary-red);
     color: white;
@@ -208,7 +197,7 @@ body {
 }
 
 /* =========================================
-   3. Main Content & Hero (SLIDER UPDATED TO SLIDE TRANSITION)
+   3. Main Content & Hero (SPLIT LAYOUT)
    ========================================= */
 #main-content {
     padding-top: var(--header-height);
@@ -223,8 +212,16 @@ body {
     overflow: hidden;
 }
 
-/* Individual Slides - Updated for SLIDE Effect */
-.hero-slide {
+/* Background Layer (Sliding Images) */
+.hero-bg-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.hero-bg-slide {
     position: absolute;
     top: 0;
     left: 0;
@@ -233,77 +230,78 @@ body {
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
-    display: flex;
-    align-items: flex-end;
     
-    /* SLIDE TRANSITION LOGIC */
-    transform: translateX(100%); /* Wait off-screen to the right */
+    /* Sliding Animation */
+    transform: translateX(100%); 
     transition: transform 0.8s ease-in-out; 
     z-index: 1;
-    opacity: 1; /* Always visible to browser, just moved off screen */
 }
 
-/* The active slide moves to center and sits on top */
-.hero-slide.active {
+.hero-bg-slide.active {
     transform: translateX(0);
-    z-index: 5; 
+    z-index: 2; 
 }
 
-/* The previous slide stays in place momentarily while new one slides over it */
-.hero-slide.last-active {
+.hero-bg-slide.last-active {
     transform: translateX(0);
-    z-index: 2;
+    z-index: 1;
 }
 
-/* Navigation Dots */
-.hero-dots {
+/* Static Text Layer (Fixed Position) */
+.hero-static-layer {
     position: absolute;
-    bottom: 20px;
-    right: var(--container-padding);
-    display: flex;
-    gap: 10px;
-    z-index: 10;
-}
-
-.dot {
-    width: 10px;
-    height: 10px;
-    background-color: rgba(255, 255, 255, 0.4);
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.dot:hover {
-    background-color: rgba(255, 255, 255, 0.8);
-}
-
-.dot.active {
-    background-color: var(--primary-red);
-    transform: scale(1.2);
-}
-
-/* Overlay and Content */
-.hero-overlay {
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(to top, var(--bg-main) 0%, rgba(20,20,20,0) 60%),
-                linear-gradient(to right, rgba(20,20,20,0.8) 0%, rgba(20,20,20,0) 50%);
+    z-index: 10; /* Above images */
+    pointer-events: none; /* Let clicks pass through to dots */
+}
+
+/* Promo Ribbon */
+.promo-ribbon {
+    position: absolute;
+    top: 80px; 
+    right: 0;
+    background: linear-gradient(90deg, var(--primary-red), #990000);
+    color: white;
+    padding: 8px 15px 8px 20px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+    box-shadow: -2px 2px 10px rgba(0,0,0,0.5);
+    z-index: 20;
+}
+
+.hero-content-wrapper {
+    width: 100%;
+    height: 100%;
     padding: 0 var(--container-padding) 40px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+    
+    /* Gradient Overlay sits here inside static layer? 
+       Actually, it's better in the image slide, BUT user wants text separate.
+       We put gradient in the slide via CSS linear-gradient on bg-image.
+    */
 }
 
 .hero-content {
     max-width: 800px;
-    /* Optional: Fade content in slightly after slide */
-    opacity: 0; 
-    animation: fadeContent 0.5s ease-out 0.4s forwards;
+    pointer-events: auto; /* Re-enable buttons */
 }
 
-@keyframes fadeContent {
-    from { opacity: 0; transform: translateY(10px); }
+/* Text Fade Animation */
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -339,6 +337,33 @@ body {
     gap: 10px;
 }
 
+.hero-dots {
+    position: absolute;
+    bottom: 20px;
+    right: var(--container-padding);
+    display: flex;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.dot:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+}
+
+.dot.active {
+    background-color: var(--primary-red);
+    transform: scale(1.2);
+}
+
 /* Buttons */
 .primary-btn, .secondary-btn {
     border: none;
@@ -357,20 +382,16 @@ body {
     background-color: white;
     color: black;
 }
-
 .primary-btn:hover {
     background-color: rgba(255, 255, 255, 0.75);
 }
-
 .secondary-btn {
     background-color: rgba(109, 109, 110, 0.7);
     color: white;
 }
-
 .secondary-btn:hover {
     background-color: rgba(109, 109, 110, 0.4);
 }
-
 .text-btn {
     background: none;
     border: none;
@@ -379,7 +400,7 @@ body {
     text-decoration: underline;
 }
 
-/* Hero Skeleton (Loading State) */
+/* Hero Skeleton */
 .hero-skeleton {
     width: 100%;
     height: 100%;
@@ -390,11 +411,11 @@ body {
 }
 
 /* =========================================
-   4. Content Rows (Horizontal Scroll)
+   4. Content Rows
    ========================================= */
 .rows-container {
     padding-bottom: 40px;
-    margin-top: -20px; /* Pull up over hero gradient */
+    margin-top: -20px; 
     position: relative;
     z-index: 10;
 }
@@ -425,7 +446,6 @@ body {
     display: none; 
 }
 
-/* Movie Card Styles */
 .movie-card {
     flex: 0 0 auto;
     width: 140px;
@@ -444,7 +464,6 @@ body {
     display: block;
 }
 
-/* Hover Effect */
 .movie-card:hover {
     transform: scale(1.08);
     z-index: 50;
@@ -486,11 +505,10 @@ body {
     margin-top: 4px;
 }
 
-/* NEW: See More Card (Displayed at end of row) */
 .see-more-card {
     flex: 0 0 auto;
     width: 140px; 
-    height: 210px; /* Match movie card height */
+    height: 210px; 
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -520,7 +538,7 @@ body {
 }
 
 /* =========================================
-   5. Grid View (Search & Favorites)
+   5. Grid View
    ========================================= */
 .view-container {
     padding: 20px var(--container-padding);
@@ -532,20 +550,6 @@ body {
     flex-direction: column;
     gap: 15px;
     margin-bottom: 20px;
-}
-
-.filters-bar {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.filters-bar select, .filters-bar button {
-    background-color: black;
-    color: white;
-    border: 1px solid var(--border-color);
-    padding: 5px 10px;
-    border-radius: 2px;
 }
 
 .media-grid {
@@ -575,7 +579,7 @@ body {
 }
 
 /* =========================================
-   6. Modals (Detail & Grid)
+   6. Modals
    ========================================= */
 .modal-backdrop {
     position: fixed;
@@ -595,7 +599,6 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
-/* Detail Modal Styles */
 .modal-content {
     background-color: #181818;
     width: 95%;
@@ -778,7 +781,6 @@ body {
     border-bottom: 1px solid white;
 }
 
-/* Episodes List */
 .episodes-container {
     margin-bottom: 25px;
     padding-top: 5px;
@@ -815,7 +817,6 @@ body {
     border-color: #666;
 }
 
-/* Related Content */
 .related-section {
     margin-top: 30px;
     padding-top: 20px;
@@ -831,12 +832,11 @@ body {
     scrollbar-width: none;
 }
 
-/* NEW: Grid Modal (For "See All") */
 .grid-modal-content {
     background-color: #141414;
     width: 90%;
     max-width: 1100px;
-    height: 80vh; /* Fixed height to allow scrolling body */
+    height: 80vh; 
     border-radius: 8px;
     padding: 30px;
     position: relative;
@@ -851,14 +851,13 @@ body {
     font-size: 1.8rem;
     font-weight: 700;
     color: white;
-    padding-right: 40px; /* Space for close btn */
+    padding-right: 40px; 
 }
 
 .grid-modal-body {
     flex-grow: 1;
     overflow-y: auto;
     padding-bottom: 20px;
-    /* Custom scrollbar for inner content */
 }
 
 .grid-modal-body::-webkit-scrollbar {
@@ -872,7 +871,6 @@ body {
     border-radius: 4px;
 }
 
-/* Video Modal */
 .video-modal-content {
     background: black;
     width: 90%;
@@ -952,8 +950,6 @@ body {
     to { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* Removed Admin Floating Button CSS */
-
 /* =========================================
    8. Media Queries (Desktop)
    ========================================= */
@@ -974,11 +970,11 @@ body {
     
     .header-container {
         justify-content: flex-start;
-        gap: 0; /* Reset gap for desktop */
+        gap: 0; 
     }
     
     .logo h1 {
-        font-size: 1.5rem; /* Restore normal size */
+        font-size: 1.5rem; 
     }
 
     .search-container {
@@ -987,7 +983,6 @@ body {
         margin-left: auto;
     }
 
-    /* Adjust Hero Height for desktop */
     .hero-wrapper {
         height: 80vh; 
     }
