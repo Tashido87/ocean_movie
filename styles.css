@@ -137,7 +137,7 @@ body {
     padding: 5px 10px;
     border-radius: 4px; 
     width: 100%;
-    max-width: 250px;
+    max-width: 300px; /* Increased slightly for AI badge space */
 }
 
 .search-icon {
@@ -149,15 +149,28 @@ body {
     background: transparent;
     border: none;
     color: white;
-    padding: 5px 10px;
+    padding: 5px 10px 5px 10px;
     width: 100%;
     outline: none;
     font-size: 0.9rem;
+    padding-right: 30px; /* Make room for AI badge */
+}
+
+/* NEW: AI Badge inside search input */
+.ai-badge {
+    position: absolute;
+    right: 35px; /* Left of the clear 'X' button */
+    color: var(--primary-red);
+    font-size: 0.7rem;
+    font-weight: 800;
+    pointer-events: none;
+    opacity: 0.8;
 }
 
 .clear-search {
     cursor: pointer;
     color: var(--text-muted);
+    z-index: 5;
 }
 
 /* Mobile Menu Toggle */
@@ -202,25 +215,73 @@ body {
 }
 
 /* =========================================
-   3. Main Content & Hero
+   3. Main Content & Hero (SLIDER UPDATED)
    ========================================= */
 #main-content {
     padding-top: var(--header-height);
     min-height: 100vh;
 }
 
-/* Hero Banner */
-.hero-banner {
+/* Hero Wrapper (Replaces single static banner) */
+.hero-wrapper {
     position: relative;
     height: 50vh; 
     width: 100%;
+    background-color: #000;
+    overflow: hidden;
+}
+
+/* Individual Slides */
+.hero-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
     display: flex;
     align-items: flex-end;
+    opacity: 0;
+    transition: opacity 1s ease-in-out;
+    z-index: 1;
 }
 
+.hero-slide.active {
+    opacity: 1;
+    z-index: 2;
+}
+
+/* Navigation Dots */
+.hero-dots {
+    position: absolute;
+    bottom: 20px;
+    right: var(--container-padding);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    background-color: rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.dot:hover {
+    background-color: rgba(255, 255, 255, 0.8);
+}
+
+.dot.active {
+    background-color: var(--primary-red);
+    transform: scale(1.2);
+}
+
+/* Overlay and Content (Shared by all slides) */
 .hero-overlay {
     width: 100%;
     height: 100%;
@@ -234,6 +295,12 @@ body {
 
 .hero-content {
     max-width: 800px;
+    animation: fadeContent 1s ease-out; /* Subtle fade for text on slide change */
+}
+
+@keyframes fadeContent {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .hero-title {
@@ -308,7 +375,7 @@ body {
     text-decoration: underline;
 }
 
-/* Hero Skeleton */
+/* Hero Skeleton (Loading State) */
 .hero-skeleton {
     width: 100%;
     height: 100%;
@@ -323,7 +390,7 @@ body {
    ========================================= */
 .rows-container {
     padding-bottom: 40px;
-    margin-top: -20px; 
+    margin-top: -20px; /* Pull up over hero gradient */
     position: relative;
     z-index: 10;
 }
@@ -415,6 +482,39 @@ body {
     margin-top: 4px;
 }
 
+/* NEW: See More Card (Displayed at end of row) */
+.see-more-card {
+    flex: 0 0 auto;
+    width: 140px; 
+    height: 210px; /* Match movie card height */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #1a1a1a;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    color: #fff;
+    transition: background-color 0.3s, transform 0.3s;
+    border: 1px solid #333;
+}
+
+.see-more-card:hover {
+    background-color: #333;
+    transform: scale(1.05);
+}
+
+.see-more-card i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    color: var(--primary-red);
+}
+
+.see-more-card span {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
 /* =========================================
    5. Grid View (Search & Favorites)
    ========================================= */
@@ -436,7 +536,7 @@ body {
     flex-wrap: wrap;
 }
 
-.filters-bar select {
+.filters-bar select, .filters-bar button {
     background-color: black;
     color: white;
     border: 1px solid var(--border-color);
@@ -471,7 +571,7 @@ body {
 }
 
 /* =========================================
-   6. Modals
+   6. Modals (Detail & Grid)
    ========================================= */
 .modal-backdrop {
     position: fixed;
@@ -488,11 +588,10 @@ body {
     padding-top: 40px;
     padding-bottom: 40px;
     backdrop-filter: blur(5px);
-    
-    /* FIX 2: Smooth scroll on iOS */
     -webkit-overflow-scrolling: touch;
 }
 
+/* Detail Modal Styles */
 .modal-content {
     background-color: #181818;
     width: 95%;
@@ -531,7 +630,6 @@ body {
     background: #333;
 }
 
-/* UPDATED Modal Hero: Cinematic Blur Layout */
 .modal-hero {
     position: relative;
     width: 100%;
@@ -601,7 +699,6 @@ body {
     font-size: 0.9rem;
 }
 
-/* New IMDB Style */
 .imdb-score {
     color: #f5c518; 
     font-weight: 700;
@@ -617,7 +714,6 @@ body {
     color: #ccc;
 }
 
-/* Subtitle Badge */
 .subtitle-badge {
     color: #f5c518; 
     border-color: #f5c518; 
@@ -665,7 +761,6 @@ body {
     color: #ddd;
 }
 
-/* Clickable Cast Links */
 .cast-link {
     color: #b3b3b3;
     cursor: pointer;
@@ -716,7 +811,7 @@ body {
     border-color: #666;
 }
 
-/* NEW: Related Content (Horizontal Scroll) */
+/* Related Content */
 .related-section {
     margin-top: 30px;
     padding-top: 20px;
@@ -724,12 +819,53 @@ body {
 }
 
 .related-grid {
-    display: flex; /* FIX 4: Horizontal Slider */
+    display: flex;
     gap: 10px;
     overflow-x: auto;
     padding-bottom: 10px;
     scroll-behavior: smooth;
     scrollbar-width: none;
+}
+
+/* NEW: Grid Modal (For "See All") */
+.grid-modal-content {
+    background-color: #141414;
+    width: 90%;
+    max-width: 1100px;
+    height: 80vh; /* Fixed height to allow scrolling body */
+    border-radius: 8px;
+    padding: 30px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    animation: slideUp 0.3s ease-out;
+}
+
+.grid-modal-header {
+    margin-bottom: 20px;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: white;
+    padding-right: 40px; /* Space for close btn */
+}
+
+.grid-modal-body {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+    /* Custom scrollbar for inner content */
+}
+
+.grid-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+.grid-modal-body::-webkit-scrollbar-track {
+    background: #111;
+}
+.grid-modal-body::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
 }
 
 /* Video Modal */
@@ -812,6 +948,28 @@ body {
     to { opacity: 1; transform: translate(-50%, 0); }
 }
 
+/* NEW: Admin Floating Button */
+.admin-link {
+    position: fixed;
+    bottom: 15px;
+    right: 15px;
+    background: rgba(20, 20, 20, 0.8);
+    color: #555;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    text-decoration: none;
+    z-index: 9999;
+    border: 1px solid #333;
+    transition: all 0.3s;
+}
+
+.admin-link:hover {
+    color: white;
+    background: var(--primary-red);
+    border-color: var(--primary-red);
+}
+
 /* =========================================
    8. Media Queries (Desktop)
    ========================================= */
@@ -840,7 +998,8 @@ body {
         margin-left: auto;
     }
 
-    .hero-banner {
+    /* Adjust Hero Height for desktop */
+    .hero-wrapper {
         height: 80vh; 
     }
 
@@ -857,6 +1016,11 @@ body {
     }
 
     .movie-card img {
+        height: 300px;
+    }
+    
+    .see-more-card {
+        width: 200px;
         height: 300px;
     }
 
@@ -876,6 +1040,10 @@ body {
         width: 240px;
     }
     .movie-card img {
+        height: 360px;
+    }
+    .see-more-card {
+        width: 240px;
         height: 360px;
     }
 }
