@@ -1,6 +1,8 @@
 /**
- * ShowCase - Netflix-style Catalog App with Gemini AI
- * Updated: Restored Detail Modal features (Episodes, Cast, Related)
+ * ShowCase - Netflix-style Catalog App
+ * Updated: Strict Config Logic.
+ * Rows display ONLY if Key (A) + Desc (B) + at least one condition (C-G) exist.
+ * Column B is used as the Row Title.
  */
 
 'use strict';
@@ -11,10 +13,10 @@
 
 const CONFIG = {
     SPREADSHEET_ID: '1R4wubVoX0rjs8Xuu_7vwQ487e4X1ES-OlER0JgSZwjQ', 
-    API_KEY: 'AIzaSyAe26yWs-xvvTROq6HZ4bEKWbObMqSSHms', // Google Sheets API
-    // ⚠️ SECURITY WARNING: In a real production app, never expose your AI API key in client-side code.
-    GEMINI_API_KEY: 'AIzaSyCkz0TcxSj5s_vVTWrNCYLPyyhMDp3r680', 
-    SHEETS: { MOVIES: 'Movies', TV: 'TV_Shows' },
+    API_KEY: 'AIzaSyAe26yWs-xvvTROq6HZ4bEKWbObMqSSHms', // Google Sheets API Key
+    
+    SHEETS: { MOVIES: 'Movies', TV: 'TV_Shows', CONFIG: 'Config' },
+    
     IMAGE_BASE_URL: 'https://image.tmdb.org/t/p/w500', 
     PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster'
 };
@@ -22,96 +24,67 @@ const CONFIG = {
 const state = {
     allContent: [],
     favorites: JSON.parse(localStorage.getItem('showcase_favorites')) || [],
+    configData: {}, // Stores processed Config tab data
     currentView: 'home', 
     isLoading: true,
     sliderInterval: null,
     currentSlideIndex: 0,
-    heroItems: [], 
-    useAiSearch: true
+    heroItems: []
 };
 
 const DOM = {
     app: document.getElementById('app'),
     header: document.getElementById('main-header'),
-    logo: document.querySelector('.logo'),
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     mobileMenu: document.getElementById('mobile-menu'),
     searchInput: document.getElementById('search-input'),
     clearSearchBtn: document.getElementById('clear-search-btn'),
     navLinks: document.querySelectorAll('[data-page]'),
-    
     loadingScreen: document.getElementById('loading-screen'),
+    
+    // Views
     homeView: document.getElementById('home-view'),
     searchView: document.getElementById('search-view'),
     favoritesView: document.getElementById('favorites-view'),
     
     // Hero & Content
     heroWrapper: document.getElementById('hero-wrapper'),
-    customBannerTitle: document.getElementById('custom-banner-title'),
     contentRows: document.getElementById('content-rows'),
     searchResultsGrid: document.getElementById('search-results-grid'),
     favoritesGrid: document.getElementById('favorites-grid'),
     searchCount: document.getElementById('search-count'),
     favCountBadge: document.getElementById('fav-count-badge'),
-    aiStatusMsg: document.getElementById('ai-status-msg'),
     
-    // Detail Modal
+    // Modals
     detailModal: document.getElementById('detail-modal'),
     modalBody: document.getElementById('modal-body-content'),
     closeDetailBtn: document.getElementById('close-detail-modal'),
-    
-    // Video Modal
     videoModal: document.getElementById('video-modal'),
     videoPlaceholder: document.getElementById('youtube-player-placeholder'),
     closeVideoBtn: document.getElementById('close-video-modal'),
-    
-    // Grid Modal (See All)
     gridModal: document.getElementById('grid-modal'),
     gridModalTitle: document.getElementById('grid-modal-title'),
     gridModalBody: document.getElementById('grid-modal-body'),
     closeGridModalBtn: document.getElementById('close-grid-modal'),
-
     toast: document.getElementById('toast'),
     toastMessage: document.getElementById('toast-message')
 };
 
 // =========================================
-// 2. DATA FETCHING (Sheets + Gemini)
+// 2. DATA FETCHING
 // =========================================
 
 async function fetchSheetData(sheetName) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${sheetName}?key=${CONFIG.API_KEY}`;
     try {
         const response = await fetch(url);
+        if (!response.ok && sheetName === CONFIG.SHEETS.CONFIG) return [];
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
         return data.values || [];
     } catch (error) {
         console.error(`Error fetching ${sheetName}:`, error);
-        throw error;
-    }
-}
-
-// GEMINI API CALLER
-async function callGeminiAPI(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
-    const payload = { contents: [{ parts: [{ text: promptText }] }] };
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        if(data.candidates && data.candidates[0].content) {
-            return data.candidates[0].content.parts[0].text;
-        } else {
-            throw new Error("No response from AI");
-        }
-    } catch (error) {
-        console.error("Gemini Error:", error);
-        throw error;
+        return [];
     }
 }
 
@@ -129,11 +102,13 @@ function processPosterUrl(url) {
 
 async function loadAllContent() {
     try {
-        const [moviesRaw, tvShowsRaw] = await Promise.all([
+        const [moviesRaw, tvShowsRaw, configRaw] = await Promise.all([
             fetchSheetData(CONFIG.SHEETS.MOVIES),
-            fetchSheetData(CONFIG.SHEETS.TV)
+            fetchSheetData(CONFIG.SHEETS.TV),
+            fetchSheetData(CONFIG.SHEETS.CONFIG)
         ]);
 
+        // --- Process Content ---
         const isValidRow = (row) => (row[0] && row[0].trim() !== '') || (row[1] && row[1].trim() !== '');
 
         const parseRow = (row, type) => {
@@ -161,7 +136,7 @@ async function loadAllContent() {
                 subtitle: isBurmese ? 'Burmese Subtitle' : 'English Subtitle',
                 director: directorName,
                 type: type,
-                originalRowIndex: 0 // Will set below for sorting
+                originalRowIndex: 0 
             };
         };
 
@@ -173,7 +148,36 @@ async function loadAllContent() {
         });
 
         state.allContent = [...movies, ...tvShows];
-        
+
+        // --- Process Config (Cols A to G) ---
+        // LOGIC UPDATE: Only process if Key (A) AND Description (B) AND at least one condition (C-G) exist
+        if (configRaw && configRaw.length > 1) {
+            configRaw.slice(1).forEach(row => {
+                const key = row[0] ? row[0].trim() : null;      // Col A
+                const desc = row[1] ? row[1].trim() : null;     // Col B (Row Title)
+                
+                const listRaw = row[2] ? row[2].trim() : '';    // Col C
+                const lang = row[3] ? row[3].trim() : '';       // Col D
+                const genre = row[4] ? row[4].trim() : '';      // Col E
+                const sort = row[5] ? row[5].trim() : '';       // Col F
+                const type = row[6] ? row[6].trim() : '';       // Col G
+
+                // Check if at least one filtering/sorting condition exists
+                const hasCondition = listRaw || lang || genre || sort || type;
+
+                if (key && desc && hasCondition) {
+                    state.configData[key] = {
+                        description: desc,
+                        list: listRaw ? listRaw.split(',').map(t => t.trim()).filter(t => t) : [],
+                        language: lang,
+                        genre: genre,
+                        sort: sort.toLowerCase(),
+                        type: type.toLowerCase()
+                    };
+                }
+            });
+        }
+
         if(DOM.homeView) initApp();
     } catch (error) {
         console.error(error);
@@ -187,73 +191,123 @@ function generateId(title) {
 }
 
 // =========================================
-// 3. UI RENDERING & HERO SLIDER
+// 3. UI RENDERING & FILTER LOGIC
 // =========================================
 
 function initApp() {
     DOM.loadingScreen.classList.add('hidden');
     DOM.homeView.classList.remove('hidden');
     updateFavCount();
+    
     setupHeroSlider();
     renderHomeRows();
 }
 
-function setupHeroSlider() {
-    const adminConfig = JSON.parse(localStorage.getItem('ocean_header_config'));
-    
-    if (adminConfig && adminConfig.items && adminConfig.items.length > 0) {
-        state.heroItems = adminConfig.items
-            .map(id => state.allContent.find(x => x.id === id))
-            .filter(x => x !== undefined);
-            
-        if(adminConfig.bannerTitle) {
-            DOM.customBannerTitle.textContent = adminConfig.bannerTitle;
-            DOM.customBannerTitle.style.display = 'block';
-        }
-    } else {
-        const highRated = state.allContent.filter(item => item.imdb > 7.0 && item.posterUrl.startsWith('http'));
-        state.heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 6);
+/**
+ * Filters content based on the Config Row rules
+ */
+function getItemsFromConfig(config) {
+    let items = [...state.allContent];
+
+    // 1. If Specific List (Col C) exists, prioritize it
+    if (config.list && config.list.length > 0) {
+        return config.list.map(title => {
+            return items.find(i => i.title.toLowerCase() === title.toLowerCase());
+        }).filter(item => item !== undefined);
     }
 
-    renderHeroSlides();
+    // 2. Filter by Type (Col G)
+    if (config.type) {
+        if (config.type.includes('tv')) {
+            items = items.filter(i => i.type === 'TV Show');
+        } else if (config.type.includes('movie')) {
+            items = items.filter(i => i.type === 'Movie');
+        }
+    }
+
+    // 3. Filter by Language (Col D)
+    if (config.language) {
+        const langTarget = config.language.toLowerCase();
+        items = items.filter(i => i.language.toLowerCase().includes(langTarget));
+    }
+
+    // 4. Filter by Genre (Col E)
+    if (config.genre) {
+        const genreTarget = config.genre.toLowerCase();
+        items = items.filter(i => i.genre.some(g => g.toLowerCase().includes(genreTarget)));
+    }
+
+    // 5. Sort (Col F)
+    if (config.sort === 'latest') {
+        // Sort by Original Sheet Order (Newest items usually at bottom/top depending on entry)
+        // Here assumes higher index = newer
+        items.sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+    } else {
+        // Default: Random
+        items.sort(() => 0.5 - Math.random());
+    }
+
+    return items;
+}
+
+function setupHeroSlider() {
+    let heroItems = [];
+    let promoText = '';
+
+    // Banner Config Logic
+    if (state.configData['banner']) {
+        const bannerConfig = state.configData['banner'];
+        promoText = bannerConfig.description; 
+        heroItems = getItemsFromConfig(bannerConfig);
+    }
+    
+    // Fallback
+    if (heroItems.length === 0) {
+        const highRated = state.allContent.filter(item => item.imdb > 7.0 && item.posterUrl.startsWith('http'));
+        heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 6);
+    }
+
+    state.heroItems = heroItems.slice(0, 5);
+    renderHeroSlides(promoText);
     startSliderInterval();
 }
 
-function renderHeroSlides() {
+function renderHeroSlides(promoText) {
     DOM.heroWrapper.innerHTML = '';
+    
+    // 1. Background Layer
+    const bgContainer = document.createElement('div');
+    bgContainer.className = 'hero-bg-container';
+
     state.heroItems.forEach((item, index) => {
         const slide = document.createElement('div');
-        // Initial state: First one active, others off to the side (handled by CSS now)
-        slide.className = `hero-slide ${index === 0 ? 'active' : ''}`;
-        slide.style.backgroundImage = `linear-gradient(to top, #141414, transparent 50%), linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 80%), url('${item.posterUrl}')`;
-        
-        slide.innerHTML = `
-            <div class="hero-overlay">
-                <div class="hero-content">
-                    <h1 class="hero-title">${item.title}</h1>
-                    <div class="hero-meta">
-                        <span class="imdb-score">IMDB ${item.imdb || 'N/A'}</span>
-                        <span>${item.year}</span>
-                        <span class="meta-badge">${item.type}</span>
-                        <span class="meta-badge subtitle-badge">${item.subtitle}</span>
-                    </div>
-                    <p class="hero-desc">${item.synopsis}</p>
-                    <div class="hero-actions">
-                        <button class="primary-btn" onclick="openVideoPlayer('${item.trailerUrl}')">
-                            <i class="fa-solid fa-play"></i> Trailer
-                        </button>
-                        <button class="secondary-btn" onclick="openDetailModal('${item.id}')">
-                            <i class="fa-solid fa-circle-info"></i> Info
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        DOM.heroWrapper.appendChild(slide);
+        slide.className = `hero-bg-slide ${index === 0 ? 'active' : ''}`;
+        slide.style.backgroundImage = `linear-gradient(to top, #141414 5%, transparent 60%), linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 80%), url('${item.posterUrl}')`;
+        bgContainer.appendChild(slide);
     });
 
-    const dotsContainer = document.createElement('div');
-    dotsContainer.className = 'hero-dots';
+    // 2. Static Text Layer
+    const staticContent = document.createElement('div');
+    staticContent.className = 'hero-static-layer';
+    
+    let ribbonHTML = '';
+    if (promoText) {
+        ribbonHTML = `<div class="promo-ribbon">${promoText}</div>`;
+    }
+
+    staticContent.innerHTML = `
+        ${ribbonHTML}
+        <div class="hero-content-wrapper">
+             <div class="hero-content" id="hero-dynamic-text"></div>
+             <div class="hero-dots" id="hero-dots-container"></div>
+        </div>
+    `;
+
+    DOM.heroWrapper.appendChild(bgContainer);
+    DOM.heroWrapper.appendChild(staticContent);
+
+    // Dots
+    const dotsContainer = document.getElementById('hero-dots-container');
     state.heroItems.forEach((_, index) => {
         const dot = document.createElement('div');
         dot.className = `dot ${index === 0 ? 'active' : ''}`;
@@ -264,42 +318,63 @@ function renderHeroSlides() {
         };
         dotsContainer.appendChild(dot);
     });
-    DOM.heroWrapper.appendChild(dotsContainer);
+
+    updateHeroText(0);
+}
+
+function updateHeroText(index) {
+    const item = state.heroItems[index];
+    const textContainer = document.getElementById('hero-dynamic-text');
+    
+    if (!item || !textContainer) return;
+
+    textContainer.classList.remove('fade-in');
+    void textContainer.offsetWidth; 
+    textContainer.classList.add('fade-in');
+
+    textContainer.innerHTML = `
+        <h1 class="hero-title">${item.title}</h1>
+        <div class="hero-meta">
+            <span class="imdb-score">IMDB ${item.imdb || 'N/A'}</span>
+            <span>${item.year}</span>
+            <span class="meta-badge">${item.type}</span>
+            <span class="meta-badge subtitle-badge">${item.subtitle}</span>
+        </div>
+        <p class="hero-desc">${item.synopsis}</p>
+        <div class="hero-actions">
+            <button class="primary-btn" onclick="openVideoPlayer('${item.trailerUrl}')">
+                <i class="fa-solid fa-play"></i> Trailer
+            </button>
+            <button class="secondary-btn" onclick="openDetailModal('${item.id}')">
+                <i class="fa-solid fa-circle-info"></i> Info
+            </button>
+        </div>
+    `;
 }
 
 function goToSlide(index) {
-    const slides = document.querySelectorAll('.hero-slide');
+    const slides = document.querySelectorAll('.hero-bg-slide');
     const dots = document.querySelectorAll('.dot');
     
-    // Manage Slider Classes for Transition
-    // 1. Mark the current (outgoing) slide as 'last-active' so it stays visible underneath
     if (slides[state.currentSlideIndex]) {
         slides[state.currentSlideIndex].classList.remove('active');
         slides[state.currentSlideIndex].classList.add('last-active');
-        
-        // Clean up 'last-active' after transition to keep DOM clean
         const oldIndex = state.currentSlideIndex;
         setTimeout(() => {
             if(slides[oldIndex]) slides[oldIndex].classList.remove('last-active');
-        }, 800); // Match CSS transition time
+        }, 800); 
     }
+    if (dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.remove('active');
     
-    if (dots[state.currentSlideIndex]) {
-        dots[state.currentSlideIndex].classList.remove('active');
-    }
-    
-    // 2. Set new index
     state.currentSlideIndex = index;
     
-    // 3. Activate new slide (Slides in from right due to CSS)
     if (slides[state.currentSlideIndex]) {
-        slides[state.currentSlideIndex].classList.remove('last-active'); // Ensure it's not marked as outgoing
+        slides[state.currentSlideIndex].classList.remove('last-active');
         slides[state.currentSlideIndex].classList.add('active');
     }
-    
-    if (dots[state.currentSlideIndex]) {
-        dots[state.currentSlideIndex].classList.add('active');
-    }
+    if (dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.add('active');
+
+    updateHeroText(index);
 }
 
 function startSliderInterval() {
@@ -308,49 +383,60 @@ function startSliderInterval() {
         let next = state.currentSlideIndex + 1;
         if (next >= state.heroItems.length) next = 0;
         goToSlide(next);
-    }, 4000); // Increased slightly for better reading time
+    }, 5000); 
 }
 
 function renderHomeRows() {
     DOM.contentRows.innerHTML = '';
+    
+    // 1. Recently Added (Fixed Row)
     const sortedByRecency = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+    createRow('Recently Added', sortedByRecency.slice(0, 15));
 
-    const categories = [
-        { title: 'Recently Added', items: sortedByRecency },
-        { title: 'Trending Movies', items: state.allContent.filter(i => i.type === 'Movie' && i.imdb >= 7.0) },
-        { title: 'TV Shows', items: state.allContent.filter(i => i.type === 'TV Show') },
-        { title: 'Action & Thriller', items: state.allContent.filter(i => i.genre.some(g => g.includes('Action') || g.includes('Thriller'))) },
-        { title: 'Comedy', items: state.allContent.filter(i => i.genre.some(g => g.includes('Comedy'))) },
-        { title: 'Sci-Fi & Fantasy', items: state.allContent.filter(i => i.genre.some(g => g.includes('Sci-Fi') || g.includes('Fantasy'))) },
-        { title: 'Top Rated', items: state.allContent.filter(i => i.imdb >= 8.0) }
-    ];
-
-    categories.forEach(cat => {
-        if (cat.items.length > 0) createRow(cat.title, cat.items);
-    });
+    // 2. Config Rows
+    for(let i=1; i<=20; i++) {
+        const key = `row_${i}`;
+        if (state.configData[key]) {
+            const rowConfig = state.configData[key];
+            const items = getItemsFromConfig(rowConfig);
+            
+            if (items.length > 0) {
+                // Use Description (Col B) as Title
+                createRow(rowConfig.description, items);
+            }
+        }
+    }
 }
 
 function createRow(title, items) {
-    const ROW_LIMIT = 10;
+    const html = createRowHTML(title, items);
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    DOM.contentRows.appendChild(div.firstElementChild);
+}
+
+function createRowHTML(title, items) {
+    const ROW_LIMIT = 15;
     const displayItems = items.slice(0, ROW_LIMIT);
     const hasMore = items.length > ROW_LIMIT;
-    
-    const rowDiv = document.createElement('div');
-    rowDiv.className = 'category-row';
     
     let sliderHTML = displayItems.map(item => createCardHTML(item)).join('');
     
     if (hasMore) {
         sliderHTML += `
-            <div class="see-more-card" onclick="openGridModal('${title}')">
+            <div class="see-more-card" onclick="openGridModal('${title.replace(/'/g, "\\'")}')">
                 <i class="fa-solid fa-arrow-right"></i>
                 <span>See All</span>
             </div>
         `;
     }
 
-    rowDiv.innerHTML = `<h3 class="row-header">${title}</h3><div class="row-slider">${sliderHTML}</div>`;
-    DOM.contentRows.appendChild(rowDiv);
+    return `
+        <div class="category-row">
+            <h3 class="row-header">${title}</h3>
+            <div class="row-slider">${sliderHTML}</div>
+        </div>
+    `;
 }
 
 function createCardHTML(item) {
@@ -369,11 +455,12 @@ function createCardHTML(item) {
 }
 
 // =========================================
-// 4. SEARCH & FILTERING (AI POWERED)
+// 4. SEARCH (CLIENT SIDE)
 // =========================================
 
-const performSearch = debounce(async () => {
-    const query = DOM.searchInput.value.trim();
+const performSearch = debounce(() => {
+    const query = DOM.searchInput.value.toLowerCase().trim();
+    
     if (!query) {
         if (state.currentView === 'search') navigateTo('home');
         return;
@@ -381,49 +468,19 @@ const performSearch = debounce(async () => {
 
     navigateTo('search');
     DOM.clearSearchBtn.classList.remove('hidden');
-    DOM.searchResultsGrid.innerHTML = '<div class="spinner"></div>';
-    DOM.aiStatusMsg.textContent = "AI is selecting relevant titles...";
 
-    try {
-        const contentContext = state.allContent.map(i => `${i.id}|${i.title}|${i.genre.join(',')}|${i.synopsis.substring(0,50)}`).join('\n');
+    const results = state.allContent.filter(item => {
+        const matchTitle = item.title.toLowerCase().includes(query);
+        const matchCast = item.cast.some(actor => actor.toLowerCase().includes(query));
+        const matchDirector = item.director && item.director.toLowerCase().includes(query);
+        const matchGenre = item.genre.some(g => g.toLowerCase().includes(query));
         
-        // Updated Prompt to emphasize AI Choice/Relevance
-        const prompt = `
-            Task: You are an intelligent movie curator.
-            User Query: "${query}" (Language could be English or Burmese/Myanmar).
-            
-            Database:
-            ${contentContext}
-            
-            Instructions:
-            1. Select the most RELEVANT movies/tv shows from the database that match the user's intent.
-            2. If the user asks for "good" or "best" movies, prioritize high IMDB scores or popular items.
-            3. Return ONLY a JSON array of IDs. Example: ["id1", "id2"].
-        `;
+        return matchTitle || matchCast || matchDirector || matchGenre;
+    });
 
-        const aiResponseText = await callGeminiAPI(prompt);
-        const jsonStr = aiResponseText.replace(/```json|```/g, '').trim();
-        const matchedIds = JSON.parse(jsonStr);
-
-        const results = matchedIds
-            .map(id => state.allContent.find(item => item.id === id))
-            .filter(item => item !== undefined);
-
-        renderGrid(DOM.searchResultsGrid, results);
-        DOM.searchCount.textContent = `(${results.length})`;
-        DOM.aiStatusMsg.textContent = `Gemini AI selected ${results.length} relevant titles.`;
-
-    } catch (e) {
-        console.error("AI Search Failed, falling back to basic filter", e);
-        DOM.aiStatusMsg.textContent = "AI unavailable. Showing basic keyword matches.";
-        const lowerQ = query.toLowerCase();
-        const results = state.allContent.filter(item => 
-            item.title.toLowerCase().includes(lowerQ) || 
-            item.genre.some(g => g.toLowerCase().includes(lowerQ))
-        );
-        renderGrid(DOM.searchResultsGrid, results);
-    }
-}, 800); 
+    renderGrid(DOM.searchResultsGrid, results);
+    DOM.searchCount.textContent = `(${results.length})`;
+}, 300);
 
 function debounce(func, wait) {
     let timeout;
@@ -447,15 +504,14 @@ function renderGrid(container, items) {
 }
 
 // =========================================
-// 5. MODALS & INTERACTIONS (RESTORED FULL LOGIC)
+// 5. MODALS & INTERACTIONS
 // =========================================
 
-// Helper for clickable cast links in modal
 window.searchByCast = function(name) {
     DOM.detailModal.classList.add('hidden');
     document.body.style.overflow = '';
     DOM.searchInput.value = name;
-    performSearch(); // Triggers the AI search with the name
+    performSearch(); 
     navigateTo('search');
 };
 
@@ -467,19 +523,16 @@ window.openDetailModal = function(id) {
 
     const isFav = state.favorites.includes(item.id);
     
-    // 1. Restore Cast Links
     const castHTML = item.cast.length > 0 
         ? item.cast.map(actor => 
             `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`
           ).join(', ')
         : 'N/A';
 
-    // 2. Restore Director Links
     const directorHTML = item.director 
         ? `<span class="cast-link" onclick="searchByCast('${item.director.replace(/'/g, "\\'")}')">${item.director}</span>`
         : 'N/A';
 
-    // 3. Restore Episodes
     let episodesHTML = '';
     if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
         const badges = item.episodes.map(e => `<div class="episode-badge">${e}</div>`).join('');
@@ -490,7 +543,6 @@ window.openDetailModal = function(id) {
             </div>`;
     }
 
-    // 4. Restore Related Items (More Like This)
     let relatedItems = state.allContent.filter(other => 
         other.id !== item.id && 
         other.genre.some(g => item.genre.includes(g))
@@ -510,7 +562,6 @@ window.openDetailModal = function(id) {
         `;
     }
 
-    // 5. Restore Play Button
     let playButtonHTML = '';
     if (item.trailerUrl) {
         playButtonHTML = `
@@ -519,7 +570,6 @@ window.openDetailModal = function(id) {
             </button>`;
     }
 
-    // 6. Assemble Full Modal
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -568,23 +618,24 @@ window.openDetailModal = function(id) {
     document.body.style.overflow = 'hidden';
 };
 
-// "See More" Grid Modal
 window.openGridModal = function(categoryTitle) {
     DOM.gridModalTitle.textContent = categoryTitle;
     DOM.gridModalBody.innerHTML = '';
+    DOM.gridModal.classList.remove('hidden');
     
     let items = [];
-    if(categoryTitle === 'Recently Added') items = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
-    else if(categoryTitle === 'Trending Movies') items = state.allContent.filter(i => i.type === 'Movie' && i.imdb >= 7.0);
-    else if(categoryTitle === 'TV Shows') items = state.allContent.filter(i => i.type === 'TV Show');
-    else if(categoryTitle === 'Top Rated') items = state.allContent.filter(i => i.imdb >= 8.0);
-    else {
-        items = state.allContent.filter(i => i.genre.some(g => categoryTitle.includes(g)));
+    if (categoryTitle === 'Recently Added') {
+        items = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+    } else {
+        const configKey = Object.keys(state.configData).find(key => state.configData[key].description === categoryTitle);
+        if (configKey) {
+            items = getItemsFromConfig(state.configData[configKey]);
+        } else {
+             items = state.allContent.filter(i => i.genre.some(g => categoryTitle.includes(g)));
+        }
     }
-
-    const limitedItems = items.slice(0, 20);
-    renderGrid(DOM.gridModalBody, limitedItems);
-    DOM.gridModal.classList.remove('hidden');
+    
+    renderGrid(DOM.gridModalBody, items.slice(0, 50));
     document.body.style.overflow = 'hidden';
 };
 
@@ -615,8 +666,6 @@ window.toggleFavorite = function(id, btnElement) {
 
 window.openVideoPlayer = function(url) {
     if (!url) { showToast('Trailer not available'); return; }
-    
-    // Extract ID
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     const videoId = (match && match[2].length === 11) ? match[2] : null;
@@ -693,7 +742,6 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.closeDetailBtn.addEventListener('click', () => { DOM.detailModal.classList.add('hidden'); document.body.style.overflow = ''; });
         DOM.closeVideoBtn.addEventListener('click', window.closeVideoPlayer);
         DOM.closeGridModalBtn.addEventListener('click', () => { DOM.gridModal.classList.add('hidden'); document.body.style.overflow = ''; });
-
         DOM.mobileMenuBtn.addEventListener('click', () => DOM.mobileMenu.classList.toggle('hidden'));
     }
 });
