@@ -223,6 +223,7 @@ function renderHeroSlides() {
     DOM.heroWrapper.innerHTML = '';
     state.heroItems.forEach((item, index) => {
         const slide = document.createElement('div');
+        // Initial state: First one active, others off to the side (handled by CSS now)
         slide.className = `hero-slide ${index === 0 ? 'active' : ''}`;
         slide.style.backgroundImage = `linear-gradient(to top, #141414, transparent 50%), linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 80%), url('${item.posterUrl}')`;
         
@@ -256,7 +257,11 @@ function renderHeroSlides() {
     state.heroItems.forEach((_, index) => {
         const dot = document.createElement('div');
         dot.className = `dot ${index === 0 ? 'active' : ''}`;
-        dot.onclick = () => goToSlide(index);
+        dot.onclick = () => {
+            clearInterval(state.sliderInterval);
+            goToSlide(index);
+            startSliderInterval();
+        };
         dotsContainer.appendChild(dot);
     });
     DOM.heroWrapper.appendChild(dotsContainer);
@@ -266,24 +271,44 @@ function goToSlide(index) {
     const slides = document.querySelectorAll('.hero-slide');
     const dots = document.querySelectorAll('.dot');
     
-    if(slides[state.currentSlideIndex]) slides[state.currentSlideIndex].classList.remove('active');
-    if(dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.remove('active');
+    // Manage Slider Classes for Transition
+    // 1. Mark the current (outgoing) slide as 'last-active' so it stays visible underneath
+    if (slides[state.currentSlideIndex]) {
+        slides[state.currentSlideIndex].classList.remove('active');
+        slides[state.currentSlideIndex].classList.add('last-active');
+        
+        // Clean up 'last-active' after transition to keep DOM clean
+        const oldIndex = state.currentSlideIndex;
+        setTimeout(() => {
+            if(slides[oldIndex]) slides[oldIndex].classList.remove('last-active');
+        }, 800); // Match CSS transition time
+    }
     
+    if (dots[state.currentSlideIndex]) {
+        dots[state.currentSlideIndex].classList.remove('active');
+    }
+    
+    // 2. Set new index
     state.currentSlideIndex = index;
     
-    if(slides[state.currentSlideIndex]) slides[state.currentSlideIndex].classList.add('active');
-    if(dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.add('active');
+    // 3. Activate new slide (Slides in from right due to CSS)
+    if (slides[state.currentSlideIndex]) {
+        slides[state.currentSlideIndex].classList.remove('last-active'); // Ensure it's not marked as outgoing
+        slides[state.currentSlideIndex].classList.add('active');
+    }
     
-    clearInterval(state.sliderInterval);
-    startSliderInterval();
+    if (dots[state.currentSlideIndex]) {
+        dots[state.currentSlideIndex].classList.add('active');
+    }
 }
 
 function startSliderInterval() {
+    if (state.sliderInterval) clearInterval(state.sliderInterval);
     state.sliderInterval = setInterval(() => {
         let next = state.currentSlideIndex + 1;
         if (next >= state.heroItems.length) next = 0;
         goToSlide(next);
-    }, 3000); 
+    }, 4000); // Increased slightly for better reading time
 }
 
 function renderHomeRows() {
@@ -357,22 +382,22 @@ const performSearch = debounce(async () => {
     navigateTo('search');
     DOM.clearSearchBtn.classList.remove('hidden');
     DOM.searchResultsGrid.innerHTML = '<div class="spinner"></div>';
-    DOM.aiStatusMsg.textContent = "AI is analyzing your request...";
+    DOM.aiStatusMsg.textContent = "AI is selecting relevant titles...";
 
     try {
         const contentContext = state.allContent.map(i => `${i.id}|${i.title}|${i.genre.join(',')}|${i.synopsis.substring(0,50)}`).join('\n');
         
+        // Updated Prompt to emphasize AI Choice/Relevance
         const prompt = `
-            Task: Search a movie database.
+            Task: You are an intelligent movie curator.
             User Query: "${query}" (Language could be English or Burmese/Myanmar).
-            Data Format: ID|Title|Genres|Snippet
             
             Database:
             ${contentContext}
             
             Instructions:
-            1. Find the top 20 items that semantically match the User Query.
-            2. If query describes a plot, match synopsis.
+            1. Select the most RELEVANT movies/tv shows from the database that match the user's intent.
+            2. If the user asks for "good" or "best" movies, prioritize high IMDB scores or popular items.
             3. Return ONLY a JSON array of IDs. Example: ["id1", "id2"].
         `;
 
@@ -386,7 +411,7 @@ const performSearch = debounce(async () => {
 
         renderGrid(DOM.searchResultsGrid, results);
         DOM.searchCount.textContent = `(${results.length})`;
-        DOM.aiStatusMsg.textContent = `Found ${results.length} results based on semantic meaning.`;
+        DOM.aiStatusMsg.textContent = `Gemini AI selected ${results.length} relevant titles.`;
 
     } catch (e) {
         console.error("AI Search Failed, falling back to basic filter", e);
@@ -660,9 +685,6 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.searchInput.value = '';
             navigateTo('home');
         });
-        
-        // Filters (Hidden in main UI but accessible if elements exist)
-        // ... (Optional: add back filters if you want them visible in UI)
         
         DOM.navLinks.forEach(link => {
             link.addEventListener('click', (e) => navigateTo(e.target.dataset.page));
