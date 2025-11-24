@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OCEAN | AI Powered Catalog</title>
+    <title>OCEAN | Movie & TV Catalog</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +24,7 @@
                 <div class="search-container">
                     <div class="search-box">
                         <i class="fa-solid fa-search search-icon"></i>
-                        <input type="text" id="search-input" placeholder="Ask AI (e.g., 'Sad movies about love')...">
+                        <input type="text" id="search-input" placeholder="Search titles, genres...">
                         <i class="fa-solid fa-times clear-search hidden" id="clear-search-btn"></i>
                     </div>
                 </div>
@@ -57,7 +57,7 @@
             
             <div id="loading-screen" class="loading-screen">
                 <div class="spinner"></div>
-                <p>Connecting to Neural Net...</p>
+                <p>Loading Catalog...</p>
             </div>
 
             <div id="home-view" class="view-container">
@@ -65,20 +65,14 @@
                     <div class="hero-skeleton"></div> 
                 </section>
 
-                <div id="custom-banner-title" style="padding: 20px var(--container-padding) 0; color: gold; display:none;"></div>
-
                 <div id="content-rows" class="rows-container">
                     </div>
             </div>
 
             <div id="search-view" class="view-container hidden">
                 <div class="section-header">
-                    <h2>AI Results <span id="search-count" class="text-muted"></span></h2>
-                    <div class="filters-bar">
-                        <button id="use-standard-search" class="secondary-btn" style="font-size: 0.8rem;">Switch to Keyword Search</button>
-                    </div>
+                    <h2>Search Results <span id="search-count" class="text-muted"></span></h2>
                 </div>
-                <p id="ai-status-msg" style="color: #888; margin-bottom: 20px; font-style: italic;"></p>
                 <div id="search-results-grid" class="media-grid"></div>
             </div>
 
@@ -97,7 +91,7 @@
         </main>
 
         <footer class="footer">
-            <p>Powered by Gemini AI</p>
+            <p>Designed for Portfolio Demo</p>
             <p class="copyright">&copy; 2025 ShowCase Catalog</p>
         </footer>
 
