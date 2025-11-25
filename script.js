@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Added Mouse Wheel Horizontal Scroll Support
+ * Updated: Increased ITEMS_PER_PAGE to 30 to support 5 full rows on Desktop (6 cols * 5 rows)
  */
 
 'use strict';
@@ -16,7 +16,11 @@ const CONFIG = {
     SHEETS: { MOVIES: 'Movies', TV: 'TV_Shows', CONFIG: 'Config' },
     
     IMAGE_BASE_URL: 'https://image.tmdb.org/t/p/w500', 
-    PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster'
+    PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster',
+    
+    // UPDATED: Set to 30 to ensure 5 full rows on Desktop (6 items/row * 5 rows = 30)
+    ITEMS_PER_PAGE: 30, 
+    PAGINATION_GROUP_SIZE: 5
 };
 
 const state = {
@@ -27,7 +31,22 @@ const state = {
     isLoading: true,
     sliderInterval: null,
     currentSlideIndex: 0,
-    heroItems: []
+    heroItems: [],
+    
+    // New Listing State
+    listing: {
+        activeItems: [],      // The full filtered list currently being paginated
+        currentPage: 1,
+        currentFilterType: '', // 'Movie', 'TV Show', or '' for mixed
+        searchQuery: '',       // Stores current search text if any
+        filters: {
+            language: '',
+            year: '',
+            genre: '',
+            subtitle: '',
+            sort: 'latest' // 'latest', 'year', 'title'
+        }
+    }
 };
 
 const DOM = {
@@ -38,12 +57,14 @@ const DOM = {
     searchInput: document.getElementById('search-input'),
     clearSearchBtn: document.getElementById('clear-search-btn'),
     navLinks: document.querySelectorAll('[data-page]'),
+    mobileNavLinks: document.querySelectorAll('.mobile-nav-links li'),
     loadingScreen: document.getElementById('loading-screen'),
     
     // Views
     homeView: document.getElementById('home-view'),
-    searchView: document.getElementById('search-view'),
+    searchView: document.getElementById('search-view'), // Kept but redirected to listing-view usually
     favoritesView: document.getElementById('favorites-view'),
+    listingView: document.getElementById('listing-view'), // NEW
     
     // Hero & Content
     heroWrapper: document.getElementById('hero-wrapper'),
@@ -53,6 +74,21 @@ const DOM = {
     searchCount: document.getElementById('search-count'),
     favCountBadge: document.getElementById('fav-count-badge'),
     
+    // Listing View Elements (NEW)
+    listingTitle: document.getElementById('listing-title'),
+    listingGrid: document.getElementById('listing-grid'),
+    listingPagination: document.getElementById('listing-pagination'),
+    listingFilters: {
+        container: document.getElementById('listing-filters'),
+        type: document.getElementById('filter-type'),
+        language: document.getElementById('filter-language'),
+        year: document.getElementById('filter-year'),
+        genre: document.getElementById('filter-genre'),
+        subtitle: document.getElementById('filter-subtitle'),
+        sort: document.getElementById('filter-sort'),
+        clearBtn: document.getElementById('filter-clear-btn')
+    },
+
     // Modals
     detailModal: document.getElementById('detail-modal'),
     modalBody: document.getElementById('modal-body-content'),
@@ -182,6 +218,7 @@ async function loadAllContent() {
             });
         }
 
+        populateFilterOptions(); // Fill dropdowns
         if(DOM.homeView) initApp();
     } catch (error) {
         console.error(error);
@@ -205,6 +242,7 @@ function initApp() {
     
     setupHeroSlider();
     renderHomeRows();
+    setupFilterEventListeners(); // Attach listeners
 }
 
 function normalizeStr(str) {
@@ -423,7 +461,7 @@ function createRowHTML(title, items) {
     
     if (hasMore) {
         sliderHTML += `
-            <div class="see-more-card" onclick="openGridModal('${title.replace(/'/g, "\\'")}')">
+            <div class="see-more-card" onclick="openListingFromRow('${title.replace(/'/g, "\\'")}')">
                 <i class="fa-solid fa-arrow-right"></i>
                 <span>See All</span>
             </div>
@@ -454,32 +492,261 @@ function createCardHTML(item) {
 }
 
 // =========================================
-// 4. SEARCH (CLIENT SIDE)
+// 4. LISTING VIEW & FILTERS (NEW LOGIC)
+// =========================================
+
+function populateFilterOptions() {
+    // Collect unique values
+    const years = new Set();
+    const languages = new Set();
+    const genres = new Set();
+
+    state.allContent.forEach(item => {
+        if (item.year && item.year !== 'N/A') years.add(item.year);
+        if (item.language) languages.add(item.language);
+        if (item.genre) item.genre.forEach(g => genres.add(g));
+    });
+
+    // Helper to populate select
+    const populate = (elementId, values, sortDesc = false) => {
+        const select = document.getElementById(elementId);
+        if(!select) return;
+        
+        // Keep first option (label)
+        const label = select.options[0];
+        select.innerHTML = '';
+        select.appendChild(label);
+
+        const sorted = Array.from(values).sort();
+        if (sortDesc) sorted.reverse();
+
+        sorted.forEach(val => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            select.appendChild(opt);
+        });
+    };
+
+    populate('filter-year', years, true);
+    populate('filter-language', languages);
+    populate('filter-genre', genres);
+}
+
+function setupFilterEventListeners() {
+    const f = DOM.listingFilters;
+    if(!f.container) return;
+
+    ['type', 'language', 'year', 'genre', 'subtitle', 'sort'].forEach(key => {
+        if(f[key]) {
+            f[key].addEventListener('change', (e) => {
+                state.listing.filters[key] = e.target.value;
+                state.listing.currentPage = 1;
+                updateListingView();
+            });
+        }
+    });
+
+    if(f.clearBtn) {
+        f.clearBtn.addEventListener('click', () => {
+            resetFilters();
+            state.listing.currentPage = 1;
+            updateListingView();
+        });
+    }
+}
+
+function resetFilters() {
+    const f = DOM.listingFilters;
+    state.listing.filters = {
+        language: '',
+        year: '',
+        genre: '',
+        subtitle: '',
+        sort: 'latest'
+    };
+    // Update DOM inputs
+    if(f.language) f.language.value = '';
+    if(f.year) f.year.value = '';
+    if(f.genre) f.genre.value = '';
+    if(f.subtitle) f.subtitle.value = '';
+    if(f.sort) f.sort.value = 'latest';
+    // Keep type if we are on Movie or TV page
+}
+
+function openListingFromRow(title) {
+    if (title === 'Recently Added') {
+        navigateTo('listing-mixed'); 
+        return;
+    }
+
+    const configKey = Object.keys(state.configData).find(key => state.configData[key].description === title);
+    
+    if (configKey) {
+        const cfg = state.configData[configKey];
+        resetFilters();
+        state.listing.currentFilterType = ''; 
+        if(cfg.type === 'movie') state.listing.currentFilterType = 'Movie';
+        if(cfg.type === 'tv show') state.listing.currentFilterType = 'TV Show';
+        
+        if(cfg.genre) state.listing.filters.genre = cfg.genre;
+        
+        const items = getItemsFromConfig(cfg);
+        navigateTo('listing-custom', { title: title, items: items });
+    } else {
+        resetFilters();
+        state.listing.currentFilterType = '';
+        state.listing.filters.genre = title; 
+        navigateTo('listing-mixed'); 
+    }
+}
+
+function updateListingView(customItems = null) {
+    let items = [];
+
+    if (customItems) {
+        items = customItems;
+    } else {
+        // Start with all content
+        items = state.allContent;
+
+        // 1. Filter by Type (Movie/TV)
+        if (state.listing.currentFilterType) {
+            items = items.filter(i => i.type === state.listing.currentFilterType);
+        }
+
+        // 2. Filter by Search Query
+        if (state.listing.searchQuery) {
+            const q = state.listing.searchQuery.toLowerCase();
+            items = items.filter(i => 
+                i.title.toLowerCase().includes(q) || 
+                i.cast.some(c => c.toLowerCase().includes(q)) ||
+                (i.director && i.director.toLowerCase().includes(q)) ||
+                i.genre.some(g => g.toLowerCase().includes(q))
+            );
+        }
+
+        // 3. Dropdown Filters
+        const f = state.listing.filters;
+        if (f.language) items = items.filter(i => i.language === f.language);
+        if (f.year) items = items.filter(i => i.year === f.year);
+        if (f.genre) items = items.filter(i => i.genre.includes(f.genre));
+        if (f.subtitle) items = items.filter(i => i.subtitle.includes(f.subtitle));
+
+        // 4. Sort
+        if (f.sort === 'latest') {
+            items.sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+        } else if (f.sort === 'year') {
+            items.sort((a, b) => parseInt(b.year) - parseInt(a.year));
+        } else if (f.sort === 'title') {
+            items.sort((a, b) => a.title.localeCompare(b.title));
+        }
+    }
+
+    state.listing.activeItems = items;
+    renderListingGrid();
+    renderPagination();
+}
+
+function renderListingGrid() {
+    DOM.listingGrid.innerHTML = '';
+    
+    if (state.listing.activeItems.length === 0) {
+        DOM.listingGrid.innerHTML = `<div class="empty-state"><p>No results found.</p></div>`;
+        return;
+    }
+
+    const start = (state.listing.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
+    const end = start + CONFIG.ITEMS_PER_PAGE;
+    const pageItems = state.listing.activeItems.slice(start, end);
+
+    pageItems.forEach(item => {
+        const div = document.createElement('div');
+        div.innerHTML = createCardHTML(item);
+        DOM.listingGrid.appendChild(div.firstElementChild);
+    });
+    
+    window.scrollTo(0, 0);
+}
+
+function renderPagination() {
+    const container = DOM.listingPagination;
+    container.innerHTML = '';
+    
+    const totalItems = state.listing.activeItems.length;
+    const totalPages = Math.ceil(totalItems / CONFIG.ITEMS_PER_PAGE);
+    
+    if (totalPages <= 1) return;
+
+    const current = state.listing.currentPage;
+    const groupSize = CONFIG.PAGINATION_GROUP_SIZE;
+    
+    // Determine group
+    const currentGroup = Math.ceil(current / groupSize);
+    const startPage = (currentGroup - 1) * groupSize + 1;
+    let endPage = startPage + groupSize - 1;
+    if (endPage > totalPages) endPage = totalPages;
+
+    // Prev Group Button
+    if (startPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'page-btn';
+        prevBtn.innerHTML = '<i class="fa-solid fa-angle-double-left"></i>';
+        prevBtn.onclick = () => {
+            state.listing.currentPage = startPage - 1;
+            renderListingGrid();
+            renderPagination();
+        };
+        container.appendChild(prevBtn);
+    }
+
+    // Page Numbers
+    for (let i = startPage; i <= endPage; i++) {
+        const btn = document.createElement('button');
+        btn.className = `page-btn ${i === current ? 'active' : ''}`;
+        btn.textContent = i;
+        btn.onclick = () => {
+            state.listing.currentPage = i;
+            renderListingGrid();
+            renderPagination();
+        };
+        container.appendChild(btn);
+    }
+
+    // Next Group Button
+    if (endPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'page-btn';
+        nextBtn.innerHTML = '<i class="fa-solid fa-angle-double-right"></i>';
+        nextBtn.onclick = () => {
+            state.listing.currentPage = endPage + 1;
+            renderListingGrid();
+            renderPagination();
+        };
+        container.appendChild(nextBtn);
+    }
+}
+
+// =========================================
+// 5. SEARCH (MODIFIED)
 // =========================================
 
 const performSearch = debounce(() => {
     const query = DOM.searchInput.value.toLowerCase().trim();
     
     if (!query) {
-        if (state.currentView === 'search') navigateTo('home');
+        if (state.currentView === 'listing') navigateTo('home');
         return;
     }
 
-    navigateTo('search');
+    // Redirect to Listing View for search
+    state.listing.searchQuery = query;
+    state.listing.currentFilterType = ''; // Search all types
+    resetFilters();
+    
+    navigateTo('search-results');
     DOM.clearSearchBtn.classList.remove('hidden');
-
-    const results = state.allContent.filter(item => {
-        const matchTitle = item.title.toLowerCase().includes(query);
-        const matchCast = item.cast.some(actor => actor.toLowerCase().includes(query));
-        const matchDirector = item.director && item.director.toLowerCase().includes(query);
-        const matchGenre = item.genre.some(g => g.toLowerCase().includes(query));
-        
-        return matchTitle || matchCast || matchDirector || matchGenre;
-    });
-
-    renderGrid(DOM.searchResultsGrid, results);
-    DOM.searchCount.textContent = `(${results.length})`;
-}, 300);
+}, 500); 
 
 function debounce(func, wait) {
     let timeout;
@@ -489,21 +756,8 @@ function debounce(func, wait) {
     };
 }
 
-function renderGrid(container, items) {
-    container.innerHTML = '';
-    if (items.length === 0) {
-        container.innerHTML = `<div class="empty-state"><p>No matches found.</p></div>`;
-        return;
-    }
-    items.forEach(item => {
-        const div = document.createElement('div');
-        div.innerHTML = createCardHTML(item);
-        container.appendChild(div.firstElementChild); 
-    });
-}
-
 // =========================================
-// 5. MODALS & INTERACTIONS
+// 6. MODALS & INTERACTIONS
 // =========================================
 
 window.searchByCast = function(name) {
@@ -511,7 +765,6 @@ window.searchByCast = function(name) {
     document.body.style.overflow = '';
     DOM.searchInput.value = name;
     performSearch(); 
-    navigateTo('search');
 };
 
 window.openDetailModal = function(id) {
@@ -618,24 +871,7 @@ window.openDetailModal = function(id) {
 };
 
 window.openGridModal = function(categoryTitle) {
-    DOM.gridModalTitle.textContent = categoryTitle;
-    DOM.gridModalBody.innerHTML = '';
-    DOM.gridModal.classList.remove('hidden');
-    
-    let items = [];
-    if (categoryTitle === 'Recently Added') {
-        items = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
-    } else {
-        const configKey = Object.keys(state.configData).find(key => state.configData[key].description === categoryTitle);
-        if (configKey) {
-            items = getItemsFromConfig(state.configData[configKey]);
-        } else {
-             items = state.allContent.filter(i => i.genre.some(g => categoryTitle.includes(g)));
-        }
-    }
-    
-    renderGrid(DOM.gridModalBody, items.slice(0, 50));
-    document.body.style.overflow = 'hidden';
+    openListingFromRow(categoryTitle);
 };
 
 window.toggleFavorite = function(id, btnElement) {
@@ -697,32 +933,88 @@ function showToast(msg) {
 }
 
 // =========================================
-// 6. NAVIGATION
+// 7. NAVIGATION
 // =========================================
 
-function navigateTo(pageName) {
+function navigateTo(pageName, data = null) {
     state.currentView = pageName;
+    
+    // Hide all views
     DOM.homeView.classList.add('hidden');
-    DOM.searchView.classList.add('hidden');
     DOM.favoritesView.classList.add('hidden');
+    DOM.listingView.classList.add('hidden');
     DOM.mobileMenu.classList.add('hidden');
     
-    if(pageName === 'home') DOM.homeView.classList.remove('hidden');
-    if(pageName === 'search') DOM.searchView.classList.remove('hidden');
-    if(pageName === 'favorites') {
+    // Reset Nav Active State
+    DOM.navLinks.forEach(link => link.classList.remove('active'));
+    DOM.mobileNavLinks.forEach(link => link.classList.remove('active'));
+
+    // Highlight active nav
+    const activeNav = document.querySelector(`[data-page="${pageName}"]`);
+    if(activeNav) activeNav.classList.add('active');
+
+    // Logic
+    if (pageName === 'home') {
+        DOM.homeView.classList.remove('hidden');
+        DOM.searchInput.value = '';
+    } 
+    else if (pageName === 'movies') {
+        DOM.listingView.classList.remove('hidden');
+        DOM.listingTitle.textContent = 'Movies';
+        resetFilters();
+        state.listing.currentFilterType = 'Movie';
+        state.listing.searchQuery = '';
+        state.listing.currentPage = 1;
+        updateListingView();
+    }
+    else if (pageName === 'tv') {
+        DOM.listingView.classList.remove('hidden');
+        DOM.listingTitle.textContent = 'TV Shows';
+        resetFilters();
+        state.listing.currentFilterType = 'TV Show';
+        state.listing.searchQuery = '';
+        state.listing.currentPage = 1;
+        updateListingView();
+    }
+    else if (pageName === 'listing-mixed' || pageName === 'search-results') {
+        DOM.listingView.classList.remove('hidden');
+        DOM.listingTitle.textContent = pageName === 'search-results' ? 'Search Results' : 'Browse';
+        state.listing.currentPage = 1;
+        updateListingView();
+    }
+    else if (pageName === 'listing-custom') {
+        DOM.listingView.classList.remove('hidden');
+        DOM.listingTitle.textContent = data.title;
+        state.listing.currentPage = 1;
+        updateListingView(data.items); // Use custom items
+    }
+    else if (pageName === 'favorites') {
         DOM.favoritesView.classList.remove('hidden');
         loadFavoritesPage();
     }
+    
     window.scrollTo(0, 0);
 }
 
 function loadFavoritesPage() {
     const items = state.allContent.filter(i => state.favorites.includes(i.id));
-    renderGrid(DOM.favoritesGrid, items);
+    const container = DOM.favoritesGrid;
+    container.innerHTML = '';
+    
+    if (items.length === 0) {
+        document.getElementById('no-favorites-msg').classList.remove('hidden');
+    } else {
+        document.getElementById('no-favorites-msg').classList.add('hidden');
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.innerHTML = createCardHTML(item);
+            container.appendChild(div.firstElementChild);
+        });
+    }
 }
 
 // =========================================
-// 7. INITIALIZATION
+// 8. INITIALIZATION
 // =========================================
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -731,10 +1023,14 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.searchInput.addEventListener('input', performSearch);
         DOM.clearSearchBtn.addEventListener('click', () => {
             DOM.searchInput.value = '';
+            state.listing.searchQuery = ''; // Clear search state
             navigateTo('home');
         });
         
         DOM.navLinks.forEach(link => {
+            link.addEventListener('click', (e) => navigateTo(e.target.dataset.page));
+        });
+        DOM.mobileNavLinks.forEach(link => {
             link.addEventListener('click', (e) => navigateTo(e.target.dataset.page));
         });
         
@@ -743,17 +1039,14 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.closeGridModalBtn.addEventListener('click', () => { DOM.gridModal.classList.add('hidden'); document.body.style.overflow = ''; });
         DOM.mobileMenuBtn.addEventListener('click', () => DOM.mobileMenu.classList.toggle('hidden'));
     
-        // MOUSE WHEEL SCROLLING SUPPORT FOR LISTS
         const contentRows = document.getElementById('content-rows');
         if (contentRows) {
             contentRows.addEventListener('wheel', (evt) => {
-                // Check if we are scrolling inside a row-slider
                 const slider = evt.target.closest('.row-slider');
                 if (slider) {
-                    // Check if horizontal scroll is actually needed/possible
                     if (slider.scrollWidth > slider.clientWidth) {
                         evt.preventDefault();
-                        slider.scrollLeft += evt.deltaY; // Convert vertical wheel to horizontal scroll
+                        slider.scrollLeft += evt.deltaY; 
                     }
                 }
             }, { passive: false });
