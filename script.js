@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Increased Banner/Hero slider limit from 5/6 to 10 items.
+ * Updated: Added 'Rating' filter (Col I) & 'Year' sort support (Latest First) in Config.
  */
 
 'use strict';
@@ -185,6 +185,7 @@ async function loadAllContent() {
 
         state.allContent = [...movies, ...tvShows];
 
+        // --- Process Config ---
         if (configRaw && configRaw.length > 1) {
             configRaw.slice(1).forEach(row => {
                 const key = row[0] ? row[0].trim() : null;
@@ -195,8 +196,9 @@ async function loadAllContent() {
                 const sort = row[5];
                 const type = row[6];
                 const platform = row[7];
+                const rating = row[8]; // Column I: Rating Filter
 
-                const hasCondition = (listRaw || lang || genre || sort || type || platform);
+                const hasCondition = (listRaw || lang || genre || sort || type || platform || rating);
 
                 if (key && desc && hasCondition) {
                     state.configData[key] = {
@@ -206,7 +208,8 @@ async function loadAllContent() {
                         genre: genre ? genre.trim() : '',
                         sort: sort ? sort.trim().toLowerCase() : 'random',
                         type: type ? type.trim().toLowerCase() : '',
-                        platform: platform ? platform.trim() : '' 
+                        platform: platform ? platform.trim() : '',
+                        rating: rating ? parseFloat(rating) : 0 // Parse Rating
                     };
                 }
             });
@@ -250,28 +253,37 @@ function getSortedByRecency(items) {
     return combined;
 }
 
+/**
+ * Filters and Sorts items based on Config Rules.
+ * Updated to include Rating Filter and Year Sort.
+ */
 function getItemsFromConfig(config) {
     let items = [...state.allContent];
 
+    // Filter by List
     if (config.list && config.list.length > 0) {
         return config.list.map(title => items.find(i => i.title.toLowerCase() === title.toLowerCase())).filter(item => item !== undefined);
     }
 
+    // Filter by Type
     if (config.type) {
         if (config.type.includes('tv')) items = items.filter(i => i.type === 'TV Show');
         else if (config.type.includes('movie')) items = items.filter(i => i.type === 'Movie');
     }
 
+    // Filter by Language
     if (config.language) {
         const langTarget = config.language.toLowerCase();
         items = items.filter(i => i.language.toLowerCase().includes(langTarget));
     }
 
+    // Filter by Genre
     if (config.genre) {
         const genreTarget = config.genre.toLowerCase();
         items = items.filter(i => i.genre.some(g => g.toLowerCase().includes(genreTarget)));
     }
 
+    // Filter by Platform
     if (config.platform) {
         const target = normalizeStr(config.platform);
         items = items.filter(i => {
@@ -281,8 +293,21 @@ function getItemsFromConfig(config) {
         });
     }
 
+    // Filter by Rating (New)
+    if (config.rating && config.rating > 0) {
+        items = items.filter(i => i.imdb >= config.rating);
+    }
+
+    // Sort Logic
     if (config.sort === 'latest') {
         items = getSortedByRecency(items);
+    } else if (config.sort === 'year') {
+        // Sort by Year (Latest first)
+        items.sort((a, b) => {
+            const yA = parseInt(a.year) || 0;
+            const yB = parseInt(b.year) || 0;
+            return yB - yA;
+        });
     } else {
         items.sort(() => 0.5 - Math.random());
     }
@@ -304,14 +329,19 @@ function initApp() {
     setupFilterEventListeners();
 }
 
-function populateFilterOptions() {
+function populateFilterOptions(typeFilter = null) {
     const years = new Set();
     const languages = new Set();
     const genres = new Set();
 
     if (!state.allContent || state.allContent.length === 0) return;
 
-    state.allContent.forEach(item => {
+    // Filter source content based on type if provided
+    const contentToProcess = typeFilter 
+        ? state.allContent.filter(item => item.type === typeFilter)
+        : state.allContent;
+
+    contentToProcess.forEach(item => {
         if (item.year && item.year !== 'N/A' && item.year.trim() !== '') years.add(item.year.trim());
         if (item.language && item.language !== 'Unknown' && item.language.trim() !== '') languages.add(item.language.trim());
         if (item.genre && Array.isArray(item.genre)) {
@@ -322,6 +352,8 @@ function populateFilterOptions() {
     const populate = (elementId, values, sortDesc = false) => {
         const select = document.getElementById(elementId);
         if(!select) return;
+        
+        // Preserve label
         const labelOption = select.firstElementChild;
         select.innerHTML = '';
         if(labelOption) select.appendChild(labelOption);
@@ -402,11 +434,9 @@ function setupHeroSlider() {
     
     if (heroItems.length === 0) {
         const highRated = state.allContent.filter(item => item.imdb > 7.0 && item.posterUrl.startsWith('http'));
-        // UPDATED: Increased limit to 10
         heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 10);
     }
 
-    // UPDATED: Allow up to 10 items in the state
     state.heroItems = heroItems.slice(0, 10);
     renderHeroSlides(promoText);
     startSliderInterval();
@@ -594,7 +624,6 @@ function createCardHTML(item) {
 }
 
 function openListingFromRow(title) {
-    // Redirect "Recently Added" clicks to their respective main pages
     if (title === 'Recently Added Movies') {
         navigateTo('movies'); 
         return;
@@ -938,6 +967,7 @@ function navigateTo(pageName, data = null) {
         DOM.listingTitle.textContent = 'Movies';
         resetFilters();
         state.listing.currentFilterType = 'Movie';
+        populateFilterOptions('Movie'); // UPDATED: Filter dropdowns for Movies
         state.listing.searchQuery = '';
         state.listing.currentPage = 1;
         updateListingView();
@@ -947,6 +977,7 @@ function navigateTo(pageName, data = null) {
         DOM.listingTitle.textContent = 'TV Shows';
         resetFilters();
         state.listing.currentFilterType = 'TV Show';
+        populateFilterOptions('TV Show'); // UPDATED: Filter dropdowns for TV
         state.listing.searchQuery = '';
         state.listing.currentPage = 1;
         updateListingView();
@@ -954,12 +985,15 @@ function navigateTo(pageName, data = null) {
     else if (pageName === 'listing-mixed' || pageName === 'search-results') {
         DOM.listingView.classList.remove('hidden');
         DOM.listingTitle.textContent = pageName === 'search-results' ? 'Search Results' : 'Browse';
+        populateFilterOptions(null); // UPDATED: Show all options
         state.listing.currentPage = 1;
         updateListingView();
     }
     else if (pageName === 'listing-custom') {
         DOM.listingView.classList.remove('hidden');
         DOM.listingTitle.textContent = data.title;
+        // Default to all options or specific type if needed, but 'null' is safest default here
+        populateFilterOptions(null); 
         state.listing.currentPage = 1;
         updateListingView(data.items);
     }
