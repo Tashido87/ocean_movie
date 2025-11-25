@@ -588,6 +588,7 @@ body {
 
 .media-grid {
     display: grid;
+    /* Default fallback */
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 15px;
 }
@@ -1042,6 +1043,7 @@ body {
         height: 300px;
     }
 
+    /* Standard Grid fallback */
     .media-grid {
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     }
@@ -1063,5 +1065,124 @@ body {
     .see-more-card {
         width: 240px;
         height: 360px;
+    }
+}
+
+/* =========================================
+   9. Listing View & Filters (New)
+   ========================================= */
+.filter-header-layout {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.filters-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.filter-select {
+    background-color: #000;
+    color: #fff;
+    border: 1px solid #333;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-select:focus {
+    border-color: var(--primary-red);
+}
+
+#filter-clear-btn {
+    padding: 8px 15px;
+    font-size: 0.9rem;
+}
+
+/* Listing Grid Logic:
+   - Mobile Default: 3 columns (force-three-col)
+   - Desktop (>= 1024px): 6 columns
+*/
+.force-three-col {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px; /* Tighter gap for mobile 3-col */
+}
+
+/* Adjust card font/size for tiny mobile 3-col */
+.force-three-col .movie-card .card-title {
+    font-size: 0.65rem;
+}
+.force-three-col .movie-card .card-meta {
+    font-size: 0.6rem;
+}
+
+/* Desktop Override */
+@media (min-width: 1024px) {
+    .force-three-col {
+        grid-template-columns: repeat(6, 1fr) !important;
+        gap: 20px; 
+    }
+    /* Restore font sizes */
+    .force-three-col .movie-card .card-title {
+        font-size: 0.8rem;
+    }
+    .force-three-col .movie-card .card-meta {
+        font-size: 0.7rem;
+    }
+}
+
+/* Pagination */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 40px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.page-btn {
+    background-color: #222;
+    color: #fff;
+    border: 1px solid #333;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.page-btn:hover {
+    background-color: #444;
+}
+
+.page-btn.active {
+    background-color: var(--primary-red);
+    border-color: var(--primary-red);
+    font-weight: 700;
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (min-width: 768px) {
+    .filter-header-layout {
+        flex-direction: column; 
+    }
+    
+    .filters-bar {
+        justify-content: flex-start;
     }
 }
