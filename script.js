@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Split "Recently Added" into separate "Recently Added Movies" and "Recently Added TV Shows" rows.
+ * Updated: Increased Banner/Hero slider limit from 5/6 to 10 items.
  */
 
 'use strict';
@@ -234,9 +234,6 @@ function normalizeStr(str) {
     return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-/**
- * Sorts items by recency. Kept as a helper, though Home Rows now uses specific split.
- */
 function getSortedByRecency(items) {
     const movies = items.filter(i => i.type === 'Movie').sort((a, b) => b.originalRowIndex - a.originalRowIndex);
     const tv = items.filter(i => i.type === 'TV Show').sort((a, b) => b.originalRowIndex - a.originalRowIndex);
@@ -405,10 +402,12 @@ function setupHeroSlider() {
     
     if (heroItems.length === 0) {
         const highRated = state.allContent.filter(item => item.imdb > 7.0 && item.posterUrl.startsWith('http'));
-        heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 6);
+        // UPDATED: Increased limit to 10
+        heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 10);
     }
 
-    state.heroItems = heroItems.slice(0, 5);
+    // UPDATED: Allow up to 10 items in the state
+    state.heroItems = heroItems.slice(0, 10);
     renderHeroSlides(promoText);
     startSliderInterval();
 }
@@ -663,7 +662,6 @@ function updateListingView(customItems = null) {
 
         // 4. Sort
         if (f.sort === 'latest') {
-            // For mixed lists in listing view, we use the interleaved sort helper
             items = getSortedByRecency(items);
         } else if (f.sort === 'year') {
             items.sort((a, b) => parseInt(b.year) - parseInt(a.year));
