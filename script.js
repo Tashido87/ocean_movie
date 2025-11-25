@@ -1,7 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Fixed Config Column Mapping
- * - Config Tab: Reads Platform from Column H (Index 7) matching your screenshot.
+ * Updated: Added Mouse Wheel Horizontal Scroll Support
  */
 
 'use strict';
@@ -113,16 +112,16 @@ async function loadAllContent() {
         const parseRow = (row, type) => {
             let isBurmese = false;
             let directorName = '';
-            let streamingPlatform = ''; 
+            let streamingPlatform = '';
 
             if (type === 'Movie') {
                 isBurmese = (row[9] === 'TRUE');
                 directorName = row[10] || '';
-                streamingPlatform = row[11] || ''; // Col L in Movies Tab
+                streamingPlatform = row[11] || ''; // Col L
             } else {
                 isBurmese = (row[11] === 'TRUE');
                 directorName = row[12] || '';
-                streamingPlatform = row[13] || ''; // Col N in TV Tab
+                streamingPlatform = row[13] || ''; // Col N
             }
 
             return {
@@ -154,23 +153,19 @@ async function loadAllContent() {
 
         state.allContent = [...movies, ...tvShows];
 
-        // --- Process Config (Matches Screenshot Layout) ---
+        // --- Process Config ---
         if (configRaw && configRaw.length > 1) {
             configRaw.slice(1).forEach(row => {
                 const key = row[0] ? row[0].trim() : null;      // Col A
                 const desc = row[1] ? row[1].trim() : null;     // Col B
-                
-                // Mapping based on Screenshot:
-                // A=Key, B=Desc, C=List, D=Lang, E=Genre, F=Sort, G=Type, H=Platform
                 
                 const listRaw = row[2];  // C
                 const lang = row[3];     // D
                 const genre = row[4];    // E
                 const sort = row[5];     // F
                 const type = row[6];     // G
-                const platform = row[7]; // H (Index 7) - FIXED
+                const platform = row[7]; // H (Index 7)
 
-                // Only add if Key + Desc + at least one condition
                 const hasCondition = (listRaw || lang || genre || sort || type || platform);
 
                 if (key && desc && hasCondition) {
@@ -212,7 +207,6 @@ function initApp() {
     renderHomeRows();
 }
 
-// Helper: Normalize string for fuzzy matching
 function normalizeStr(str) {
     if (!str) return '';
     return str.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -221,14 +215,12 @@ function normalizeStr(str) {
 function getItemsFromConfig(config) {
     let items = [...state.allContent];
 
-    // 1. List (Col C)
     if (config.list && config.list.length > 0) {
         return config.list.map(title => {
             return items.find(i => i.title.toLowerCase() === title.toLowerCase());
         }).filter(item => item !== undefined);
     }
 
-    // 2. Type (Col G)
     if (config.type) {
         if (config.type.includes('tv')) {
             items = items.filter(i => i.type === 'TV Show');
@@ -237,34 +229,28 @@ function getItemsFromConfig(config) {
         }
     }
 
-    // 3. Language (Col D)
     if (config.language) {
         const langTarget = config.language.toLowerCase();
         items = items.filter(i => i.language.toLowerCase().includes(langTarget));
     }
 
-    // 4. Genre (Col E)
     if (config.genre) {
         const genreTarget = config.genre.toLowerCase();
         items = items.filter(i => i.genre.some(g => g.toLowerCase().includes(genreTarget)));
     }
 
-    // 5. Streaming Platform (Col H) - FUZZY MATCH
     if (config.platform) {
         const target = normalizeStr(config.platform);
         items = items.filter(i => {
             if (!i.streaming) return false;
             const current = normalizeStr(i.streaming);
-            // Check bidirectional inclusion for maximum fuzzy match
             return current.includes(target) || target.includes(current); 
         });
     }
 
-    // 6. Sort (Col F)
     if (config.sort === 'latest') {
         items.sort((a, b) => b.originalRowIndex - a.originalRowIndex);
     } else {
-        // Default: Random
         items.sort(() => 0.5 - Math.random());
     }
 
@@ -406,7 +392,7 @@ function renderHomeRows() {
     DOM.contentRows.innerHTML = '';
     
     const sortedByRecency = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
-    createRow('Recently Added', sortedByRecency.slice(0, 15));
+    createRow('Recently Added', sortedByRecency); 
 
     for(let i=1; i<=20; i++) {
         const key = `row_${i}`;
@@ -429,7 +415,7 @@ function createRow(title, items) {
 }
 
 function createRowHTML(title, items) {
-    const ROW_LIMIT = 15;
+    const ROW_LIMIT = 10;
     const displayItems = items.slice(0, ROW_LIMIT);
     const hasMore = items.length > ROW_LIMIT;
     
@@ -756,5 +742,21 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.closeVideoBtn.addEventListener('click', window.closeVideoPlayer);
         DOM.closeGridModalBtn.addEventListener('click', () => { DOM.gridModal.classList.add('hidden'); document.body.style.overflow = ''; });
         DOM.mobileMenuBtn.addEventListener('click', () => DOM.mobileMenu.classList.toggle('hidden'));
+    
+        // MOUSE WHEEL SCROLLING SUPPORT FOR LISTS
+        const contentRows = document.getElementById('content-rows');
+        if (contentRows) {
+            contentRows.addEventListener('wheel', (evt) => {
+                // Check if we are scrolling inside a row-slider
+                const slider = evt.target.closest('.row-slider');
+                if (slider) {
+                    // Check if horizontal scroll is actually needed/possible
+                    if (slider.scrollWidth > slider.clientWidth) {
+                        evt.preventDefault();
+                        slider.scrollLeft += evt.deltaY; // Convert vertical wheel to horizontal scroll
+                    }
+                }
+            }, { passive: false });
+        }
     }
 });
