@@ -88,6 +88,46 @@
                 </div>
             </div>
 
+            <div id="listing-view" class="view-container hidden">
+                <div class="section-header filter-header-layout">
+                    <h2 id="listing-title">Listing</h2>
+                    <div class="filters-bar" id="listing-filters">
+                        <select id="filter-type" class="filter-select hidden">
+                            <option value="">All Types</option>
+                            <option value="Movie">Movies</option>
+                            <option value="TV Show">TV Shows</option>
+                        </select>
+                        
+                        <select id="filter-language" class="filter-select">
+                            <option value="">Language</option>
+                            </select>
+                        <select id="filter-year" class="filter-select">
+                            <option value="">Year</option>
+                             </select>
+                        <select id="filter-genre" class="filter-select">
+                            <option value="">Genre</option>
+                             </select>
+                        <select id="filter-subtitle" class="filter-select">
+                            <option value="">Subtitle</option>
+                            <option value="Burmese">Burmese</option>
+                            <option value="English">English</option>
+                        </select>
+                        <select id="filter-sort" class="filter-select">
+                            <option value="latest">Recently Added</option>
+                            <option value="year">Released Year</option>
+                            <option value="title">Title (A-Z)</option>
+                        </select>
+                        <button id="filter-clear-btn" class="secondary-btn">Clear</button>
+                    </div>
+                </div>
+                
+                <div id="listing-grid" class="media-grid force-three-col">
+                    </div>
+                
+                <div id="listing-pagination" class="pagination-container">
+                    </div>
+            </div>
+
         </main>
 
         <footer class="footer">
