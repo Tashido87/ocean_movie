@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Increased ITEMS_PER_PAGE to 30 to support 5 full rows on Desktop (6 cols * 5 rows)
+ * Updated: Split "Recently Added" into separate "Recently Added Movies" and "Recently Added TV Shows" rows.
  */
 
 'use strict';
@@ -18,8 +18,7 @@ const CONFIG = {
     IMAGE_BASE_URL: 'https://image.tmdb.org/t/p/w500', 
     PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster',
     
-    // UPDATED: Set to 30 to ensure 5 full rows on Desktop (6 items/row * 5 rows = 30)
-    ITEMS_PER_PAGE: 30, 
+    ITEMS_PER_PAGE: 30, // Supports 5 full rows on Desktop
     PAGINATION_GROUP_SIZE: 5
 };
 
@@ -33,18 +32,18 @@ const state = {
     currentSlideIndex: 0,
     heroItems: [],
     
-    // New Listing State
+    // Listing / Search State
     listing: {
-        activeItems: [],      // The full filtered list currently being paginated
+        activeItems: [],
         currentPage: 1,
-        currentFilterType: '', // 'Movie', 'TV Show', or '' for mixed
-        searchQuery: '',       // Stores current search text if any
+        currentFilterType: '', 
+        searchQuery: '',
         filters: {
             language: '',
             year: '',
             genre: '',
             subtitle: '',
-            sort: 'latest' // 'latest', 'year', 'title'
+            sort: 'latest' 
         }
     }
 };
@@ -62,19 +61,17 @@ const DOM = {
     
     // Views
     homeView: document.getElementById('home-view'),
-    searchView: document.getElementById('search-view'), // Kept but redirected to listing-view usually
+    searchView: document.getElementById('search-view'),
     favoritesView: document.getElementById('favorites-view'),
-    listingView: document.getElementById('listing-view'), // NEW
+    listingView: document.getElementById('listing-view'),
     
     // Hero & Content
     heroWrapper: document.getElementById('hero-wrapper'),
     contentRows: document.getElementById('content-rows'),
-    searchResultsGrid: document.getElementById('search-results-grid'),
     favoritesGrid: document.getElementById('favorites-grid'),
-    searchCount: document.getElementById('search-count'),
     favCountBadge: document.getElementById('fav-count-badge'),
     
-    // Listing View Elements (NEW)
+    // Listing View Elements
     listingTitle: document.getElementById('listing-title'),
     listingGrid: document.getElementById('listing-grid'),
     listingPagination: document.getElementById('listing-pagination'),
@@ -142,7 +139,6 @@ async function loadAllContent() {
             fetchSheetData(CONFIG.SHEETS.CONFIG)
         ]);
 
-        // --- Process Content ---
         const isValidRow = (row) => (row[0] && row[0].trim() !== '') || (row[1] && row[1].trim() !== '');
 
         const parseRow = (row, type) => {
@@ -153,11 +149,11 @@ async function loadAllContent() {
             if (type === 'Movie') {
                 isBurmese = (row[9] === 'TRUE');
                 directorName = row[10] || '';
-                streamingPlatform = row[11] || ''; // Col L
+                streamingPlatform = row[11] || ''; 
             } else {
                 isBurmese = (row[11] === 'TRUE');
                 directorName = row[12] || '';
-                streamingPlatform = row[13] || ''; // Col N
+                streamingPlatform = row[13] || ''; 
             }
 
             return {
@@ -165,7 +161,7 @@ async function loadAllContent() {
                 title: row[0] || 'Untitled',
                 year: row[1] || 'N/A',
                 language: row[2] || 'Unknown',
-                genre: row[3] ? row[3].split(',').map(g => g.trim()) : [],
+                genre: row[3] ? row[3].split(',').map(g => g.trim()).filter(g => g) : [],
                 synopsis: row[4] || '',
                 cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
                 imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
@@ -189,18 +185,16 @@ async function loadAllContent() {
 
         state.allContent = [...movies, ...tvShows];
 
-        // --- Process Config ---
         if (configRaw && configRaw.length > 1) {
             configRaw.slice(1).forEach(row => {
-                const key = row[0] ? row[0].trim() : null;      // Col A
-                const desc = row[1] ? row[1].trim() : null;     // Col B
-                
-                const listRaw = row[2];  // C
-                const lang = row[3];     // D
-                const genre = row[4];    // E
-                const sort = row[5];     // F
-                const type = row[6];     // G
-                const platform = row[7]; // H (Index 7)
+                const key = row[0] ? row[0].trim() : null;
+                const desc = row[1] ? row[1].trim() : null;
+                const listRaw = row[2];
+                const lang = row[3];
+                const genre = row[4];
+                const sort = row[5];
+                const type = row[6];
+                const platform = row[7];
 
                 const hasCondition = (listRaw || lang || genre || sort || type || platform);
 
@@ -218,7 +212,7 @@ async function loadAllContent() {
             });
         }
 
-        populateFilterOptions(); // Fill dropdowns
+        populateFilterOptions(); 
         if(DOM.homeView) initApp();
     } catch (error) {
         console.error(error);
@@ -232,39 +226,43 @@ function generateId(title) {
 }
 
 // =========================================
-// 3. UI RENDERING & FILTER LOGIC
+// 3. HELPER FUNCTIONS
 // =========================================
-
-function initApp() {
-    DOM.loadingScreen.classList.add('hidden');
-    DOM.homeView.classList.remove('hidden');
-    updateFavCount();
-    
-    setupHeroSlider();
-    renderHomeRows();
-    setupFilterEventListeners(); // Attach listeners
-}
 
 function normalizeStr(str) {
     if (!str) return '';
     return str.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Sorts items by recency. Kept as a helper, though Home Rows now uses specific split.
+ */
+function getSortedByRecency(items) {
+    const movies = items.filter(i => i.type === 'Movie').sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+    const tv = items.filter(i => i.type === 'TV Show').sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+
+    if (movies.length === 0) return tv;
+    if (tv.length === 0) return movies;
+
+    const combined = [];
+    const max = Math.max(movies.length, tv.length);
+    for (let i = 0; i < max; i++) {
+        if (i < movies.length) combined.push(movies[i]);
+        if (i < tv.length) combined.push(tv[i]);
+    }
+    return combined;
+}
+
 function getItemsFromConfig(config) {
     let items = [...state.allContent];
 
     if (config.list && config.list.length > 0) {
-        return config.list.map(title => {
-            return items.find(i => i.title.toLowerCase() === title.toLowerCase());
-        }).filter(item => item !== undefined);
+        return config.list.map(title => items.find(i => i.title.toLowerCase() === title.toLowerCase())).filter(item => item !== undefined);
     }
 
     if (config.type) {
-        if (config.type.includes('tv')) {
-            items = items.filter(i => i.type === 'TV Show');
-        } else if (config.type.includes('movie')) {
-            items = items.filter(i => i.type === 'Movie');
-        }
+        if (config.type.includes('tv')) items = items.filter(i => i.type === 'TV Show');
+        else if (config.type.includes('movie')) items = items.filter(i => i.type === 'Movie');
     }
 
     if (config.language) {
@@ -287,12 +285,112 @@ function getItemsFromConfig(config) {
     }
 
     if (config.sort === 'latest') {
-        items.sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+        items = getSortedByRecency(items);
     } else {
         items.sort(() => 0.5 - Math.random());
     }
 
     return items;
+}
+
+// =========================================
+// 4. UI RENDERING & FILTER LOGIC
+// =========================================
+
+function initApp() {
+    DOM.loadingScreen.classList.add('hidden');
+    DOM.homeView.classList.remove('hidden');
+    updateFavCount();
+    
+    setupHeroSlider();
+    renderHomeRows();
+    setupFilterEventListeners();
+}
+
+function populateFilterOptions() {
+    const years = new Set();
+    const languages = new Set();
+    const genres = new Set();
+
+    if (!state.allContent || state.allContent.length === 0) return;
+
+    state.allContent.forEach(item => {
+        if (item.year && item.year !== 'N/A' && item.year.trim() !== '') years.add(item.year.trim());
+        if (item.language && item.language !== 'Unknown' && item.language.trim() !== '') languages.add(item.language.trim());
+        if (item.genre && Array.isArray(item.genre)) {
+            item.genre.forEach(g => { if(g && g.trim() !== '') genres.add(g.trim()); });
+        }
+    });
+
+    const populate = (elementId, values, sortDesc = false) => {
+        const select = document.getElementById(elementId);
+        if(!select) return;
+        const labelOption = select.firstElementChild;
+        select.innerHTML = '';
+        if(labelOption) select.appendChild(labelOption);
+
+        const array = Array.from(values);
+        if (sortDesc) {
+            array.sort((a, b) => {
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) return numB - numA;
+                return b.localeCompare(a);
+            });
+        } else {
+            array.sort((a, b) => a.localeCompare(b));
+        }
+
+        array.forEach(val => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            select.appendChild(opt);
+        });
+    };
+
+    populate('filter-year', years, true);
+    populate('filter-language', languages);
+    populate('filter-genre', genres);
+}
+
+function setupFilterEventListeners() {
+    const f = DOM.listingFilters;
+    if(!f.container) return;
+
+    ['type', 'language', 'year', 'genre', 'subtitle', 'sort'].forEach(key => {
+        if(f[key]) {
+            f[key].addEventListener('change', (e) => {
+                state.listing.filters[key] = e.target.value;
+                state.listing.currentPage = 1; 
+                updateListingView();
+            });
+        }
+    });
+
+    if(f.clearBtn) {
+        f.clearBtn.addEventListener('click', () => {
+            resetFilters();
+            state.listing.currentPage = 1;
+            updateListingView();
+        });
+    }
+}
+
+function resetFilters() {
+    const f = DOM.listingFilters;
+    state.listing.filters = {
+        language: '',
+        year: '',
+        genre: '',
+        subtitle: '',
+        sort: 'latest'
+    };
+    if(f.language) f.language.value = '';
+    if(f.year) f.year.value = '';
+    if(f.genre) f.genre.value = '';
+    if(f.subtitle) f.subtitle.value = '';
+    if(f.sort) f.sort.value = 'latest';
 }
 
 function setupHeroSlider() {
@@ -317,7 +415,6 @@ function setupHeroSlider() {
 
 function renderHeroSlides(promoText) {
     DOM.heroWrapper.innerHTML = '';
-    
     const bgContainer = document.createElement('div');
     bgContainer.className = 'hero-bg-container';
 
@@ -330,11 +427,7 @@ function renderHeroSlides(promoText) {
 
     const staticContent = document.createElement('div');
     staticContent.className = 'hero-static-layer';
-    
-    let ribbonHTML = '';
-    if (promoText) {
-        ribbonHTML = `<div class="promo-ribbon">${promoText}</div>`;
-    }
+    let ribbonHTML = promoText ? `<div class="promo-ribbon">${promoText}</div>` : '';
 
     staticContent.innerHTML = `
         ${ribbonHTML}
@@ -365,7 +458,6 @@ function renderHeroSlides(promoText) {
 function updateHeroText(index) {
     const item = state.heroItems[index];
     const textContainer = document.getElementById('hero-dynamic-text');
-    
     if (!item || !textContainer) return;
 
     textContainer.classList.remove('fade-in');
@@ -407,13 +499,11 @@ function goToSlide(index) {
     if (dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.remove('active');
     
     state.currentSlideIndex = index;
-    
     if (slides[state.currentSlideIndex]) {
         slides[state.currentSlideIndex].classList.remove('last-active');
         slides[state.currentSlideIndex].classList.add('active');
     }
     if (dots[state.currentSlideIndex]) dots[state.currentSlideIndex].classList.add('active');
-
     updateHeroText(index);
 }
 
@@ -429,18 +519,31 @@ function startSliderInterval() {
 function renderHomeRows() {
     DOM.contentRows.innerHTML = '';
     
-    const sortedByRecency = [...state.allContent].sort((a, b) => b.originalRowIndex - a.originalRowIndex);
-    createRow('Recently Added', sortedByRecency); 
+    // 1. Recently Added Movies (Newest First)
+    const recentMovies = state.allContent
+        .filter(item => item.type === 'Movie')
+        .sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+        
+    if (recentMovies.length > 0) {
+        createRow('Recently Added Movies', recentMovies);
+    }
 
+    // 2. Recently Added TV Shows (Newest First)
+    const recentTV = state.allContent
+        .filter(item => item.type === 'TV Show')
+        .sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+
+    if (recentTV.length > 0) {
+        createRow('Recently Added TV Shows', recentTV);
+    }
+
+    // 3. Config Rows
     for(let i=1; i<=20; i++) {
         const key = `row_${i}`;
         if (state.configData[key]) {
             const rowConfig = state.configData[key];
             const items = getItemsFromConfig(rowConfig);
-            
-            if (items.length > 0) {
-                createRow(rowConfig.description, items);
-            }
+            if (items.length > 0) createRow(rowConfig.description, items);
         }
     }
 }
@@ -491,92 +594,14 @@ function createCardHTML(item) {
     `;
 }
 
-// =========================================
-// 4. LISTING VIEW & FILTERS (NEW LOGIC)
-// =========================================
-
-function populateFilterOptions() {
-    // Collect unique values
-    const years = new Set();
-    const languages = new Set();
-    const genres = new Set();
-
-    state.allContent.forEach(item => {
-        if (item.year && item.year !== 'N/A') years.add(item.year);
-        if (item.language) languages.add(item.language);
-        if (item.genre) item.genre.forEach(g => genres.add(g));
-    });
-
-    // Helper to populate select
-    const populate = (elementId, values, sortDesc = false) => {
-        const select = document.getElementById(elementId);
-        if(!select) return;
-        
-        // Keep first option (label)
-        const label = select.options[0];
-        select.innerHTML = '';
-        select.appendChild(label);
-
-        const sorted = Array.from(values).sort();
-        if (sortDesc) sorted.reverse();
-
-        sorted.forEach(val => {
-            const opt = document.createElement('option');
-            opt.value = val;
-            opt.textContent = val;
-            select.appendChild(opt);
-        });
-    };
-
-    populate('filter-year', years, true);
-    populate('filter-language', languages);
-    populate('filter-genre', genres);
-}
-
-function setupFilterEventListeners() {
-    const f = DOM.listingFilters;
-    if(!f.container) return;
-
-    ['type', 'language', 'year', 'genre', 'subtitle', 'sort'].forEach(key => {
-        if(f[key]) {
-            f[key].addEventListener('change', (e) => {
-                state.listing.filters[key] = e.target.value;
-                state.listing.currentPage = 1;
-                updateListingView();
-            });
-        }
-    });
-
-    if(f.clearBtn) {
-        f.clearBtn.addEventListener('click', () => {
-            resetFilters();
-            state.listing.currentPage = 1;
-            updateListingView();
-        });
-    }
-}
-
-function resetFilters() {
-    const f = DOM.listingFilters;
-    state.listing.filters = {
-        language: '',
-        year: '',
-        genre: '',
-        subtitle: '',
-        sort: 'latest'
-    };
-    // Update DOM inputs
-    if(f.language) f.language.value = '';
-    if(f.year) f.year.value = '';
-    if(f.genre) f.genre.value = '';
-    if(f.subtitle) f.subtitle.value = '';
-    if(f.sort) f.sort.value = 'latest';
-    // Keep type if we are on Movie or TV page
-}
-
 function openListingFromRow(title) {
-    if (title === 'Recently Added') {
-        navigateTo('listing-mixed'); 
+    // Redirect "Recently Added" clicks to their respective main pages
+    if (title === 'Recently Added Movies') {
+        navigateTo('movies'); 
+        return;
+    }
+    if (title === 'Recently Added TV Shows') {
+        navigateTo('tv'); 
         return;
     }
 
@@ -588,7 +613,6 @@ function openListingFromRow(title) {
         state.listing.currentFilterType = ''; 
         if(cfg.type === 'movie') state.listing.currentFilterType = 'Movie';
         if(cfg.type === 'tv show') state.listing.currentFilterType = 'TV Show';
-        
         if(cfg.genre) state.listing.filters.genre = cfg.genre;
         
         const items = getItemsFromConfig(cfg);
@@ -601,6 +625,10 @@ function openListingFromRow(title) {
     }
 }
 
+// =========================================
+// 5. MAIN LISTING VIEW UPDATE
+// =========================================
+
 function updateListingView(customItems = null) {
     let items = [];
 
@@ -610,7 +638,7 @@ function updateListingView(customItems = null) {
         // Start with all content
         items = state.allContent;
 
-        // 1. Filter by Type (Movie/TV)
+        // 1. Filter by Type
         if (state.listing.currentFilterType) {
             items = items.filter(i => i.type === state.listing.currentFilterType);
         }
@@ -635,7 +663,8 @@ function updateListingView(customItems = null) {
 
         // 4. Sort
         if (f.sort === 'latest') {
-            items.sort((a, b) => b.originalRowIndex - a.originalRowIndex);
+            // For mixed lists in listing view, we use the interleaved sort helper
+            items = getSortedByRecency(items);
         } else if (f.sort === 'year') {
             items.sort((a, b) => parseInt(b.year) - parseInt(a.year));
         } else if (f.sort === 'title') {
@@ -681,13 +710,11 @@ function renderPagination() {
     const current = state.listing.currentPage;
     const groupSize = CONFIG.PAGINATION_GROUP_SIZE;
     
-    // Determine group
     const currentGroup = Math.ceil(current / groupSize);
     const startPage = (currentGroup - 1) * groupSize + 1;
     let endPage = startPage + groupSize - 1;
     if (endPage > totalPages) endPage = totalPages;
 
-    // Prev Group Button
     if (startPage > 1) {
         const prevBtn = document.createElement('button');
         prevBtn.className = 'page-btn';
@@ -700,7 +727,6 @@ function renderPagination() {
         container.appendChild(prevBtn);
     }
 
-    // Page Numbers
     for (let i = startPage; i <= endPage; i++) {
         const btn = document.createElement('button');
         btn.className = `page-btn ${i === current ? 'active' : ''}`;
@@ -713,7 +739,6 @@ function renderPagination() {
         container.appendChild(btn);
     }
 
-    // Next Group Button
     if (endPage < totalPages) {
         const nextBtn = document.createElement('button');
         nextBtn.className = 'page-btn';
@@ -728,22 +753,20 @@ function renderPagination() {
 }
 
 // =========================================
-// 5. SEARCH (MODIFIED)
+// 6. SEARCH & INTERACTIONS
 // =========================================
 
 const performSearch = debounce(() => {
     const query = DOM.searchInput.value.toLowerCase().trim();
-    
     if (!query) {
-        if (state.currentView === 'listing') navigateTo('home');
+        if (state.currentView === 'listing-mixed' || state.currentView === 'search-results') {
+            navigateTo('home');
+        }
         return;
     }
-
-    // Redirect to Listing View for search
     state.listing.searchQuery = query;
-    state.listing.currentFilterType = ''; // Search all types
+    state.listing.currentFilterType = '';
     resetFilters();
-    
     navigateTo('search-results');
     DOM.clearSearchBtn.classList.remove('hidden');
 }, 500); 
@@ -756,10 +779,6 @@ function debounce(func, wait) {
     };
 }
 
-// =========================================
-// 6. MODALS & INTERACTIONS
-// =========================================
-
 window.searchByCast = function(name) {
     DOM.detailModal.classList.add('hidden');
     document.body.style.overflow = '';
@@ -769,22 +788,17 @@ window.searchByCast = function(name) {
 
 window.openDetailModal = function(id) {
     DOM.detailModal.scrollTop = 0;
-
     const item = state.allContent.find(i => i.id === id);
     if (!item) return;
 
     const isFav = state.favorites.includes(item.id);
-    
     const castHTML = item.cast.length > 0 
-        ? item.cast.map(actor => 
-            `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`
-          ).join(', ')
+        ? item.cast.map(actor => `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`).join(', ')
         : 'N/A';
-
     const directorHTML = item.director 
         ? `<span class="cast-link" onclick="searchByCast('${item.director.replace(/'/g, "\\'")}')">${item.director}</span>`
         : 'N/A';
-
+    
     let episodesHTML = '';
     if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
         const badges = item.episodes.map(e => `<div class="episode-badge">${e}</div>`).join('');
@@ -796,31 +810,23 @@ window.openDetailModal = function(id) {
     }
 
     let relatedItems = state.allContent.filter(other => 
-        other.id !== item.id && 
-        other.genre.some(g => item.genre.includes(g))
+        other.id !== item.id && other.genre.some(g => item.genre.includes(g))
     );
     relatedItems = relatedItems.sort(() => 0.5 - Math.random()).slice(0, 6);
     
     let relatedHTML = '';
     if (relatedItems.length > 0) {
-        const cardsHTML = relatedItems.map(r => createCardHTML(r)).join('');
         relatedHTML = `
             <div class="related-section">
                 <h3 class="episodes-header">More Like This</h3>
-                <div class="related-grid">
-                    ${cardsHTML}
-                </div>
-            </div>
-        `;
+                <div class="related-grid">${relatedItems.map(r => createCardHTML(r)).join('')}</div>
+            </div>`;
     }
 
-    let playButtonHTML = '';
-    if (item.trailerUrl) {
-        playButtonHTML = `
-            <button class="primary-btn" onclick="openVideoPlayer('${item.trailerUrl}')">
-                <i class="fa-solid fa-play"></i> Play Trailer
-            </button>`;
-    }
+    let playButtonHTML = item.trailerUrl ? `
+        <button class="primary-btn" onclick="openVideoPlayer('${item.trailerUrl}')">
+            <i class="fa-solid fa-play"></i> Play Trailer
+        </button>` : '';
 
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
@@ -828,7 +834,6 @@ window.openDetailModal = function(id) {
             <img class="hero-poster-img" src="${item.posterUrl}" alt="${item.title}" onerror="this.src='${CONFIG.PLACEHOLDER_IMG}'">
             <div class="hero-gradient-overlay"></div>
         </div>
-
         <div class="modal-info">
             <div class="modal-header-row">
                 <h2>${item.title}</h2>
@@ -840,44 +845,27 @@ window.openDetailModal = function(id) {
                     <span class="meta-badge subtitle-badge">${item.subtitle}</span>
                 </div>
             </div>
-            
             <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
                 ${playButtonHTML}
                 <button class="modal-fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite('${item.id}', this)">
                     <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
                 </button>
             </div>
-            
             ${episodesHTML}
-
             <p class="modal-description">${item.synopsis}</p>
-            
-            <div class="modal-detail-list">
-                <span>Cast:</span> ${castHTML}
-            </div>
-            <div class="modal-detail-list">
-                <span>Director:</span> ${directorHTML}
-            </div>
-            <div class="modal-detail-list">
-                <span>Genres:</span> ${item.genre.join(', ')}
-            </div>
-            
+            <div class="modal-detail-list"><span>Cast:</span> ${castHTML}</div>
+            <div class="modal-detail-list"><span>Director:</span> ${directorHTML}</div>
+            <div class="modal-detail-list"><span>Genres:</span> ${item.genre.join(', ')}</div>
             ${relatedHTML}
         </div>
     `;
-
     DOM.detailModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
-};
-
-window.openGridModal = function(categoryTitle) {
-    openListingFromRow(categoryTitle);
 };
 
 window.toggleFavorite = function(id, btnElement) {
     const index = state.favorites.indexOf(id);
     const icon = btnElement.querySelector('i');
-    
     if (index === -1) {
         state.favorites.push(id);
         btnElement.classList.add('active');
@@ -890,10 +878,7 @@ window.toggleFavorite = function(id, btnElement) {
         icon.classList.remove('fa-solid');
         icon.classList.add('fa-regular');
         showToast('Removed from My List');
-        
-        if (state.currentView === 'favorites') {
-            loadFavoritesPage();
-        }
+        if (state.currentView === 'favorites') loadFavoritesPage();
     }
     localStorage.setItem('showcase_favorites', JSON.stringify(state.favorites));
     updateFavCount();
@@ -927,9 +912,7 @@ function updateFavCount() {
 function showToast(msg) {
     DOM.toastMessage.textContent = msg;
     DOM.toast.classList.remove('hidden');
-    setTimeout(() => {
-        DOM.toast.classList.add('hidden');
-    }, 3000);
+    setTimeout(() => { DOM.toast.classList.add('hidden'); }, 3000);
 }
 
 // =========================================
@@ -938,22 +921,16 @@ function showToast(msg) {
 
 function navigateTo(pageName, data = null) {
     state.currentView = pageName;
-    
-    // Hide all views
     DOM.homeView.classList.add('hidden');
     DOM.favoritesView.classList.add('hidden');
     DOM.listingView.classList.add('hidden');
     DOM.mobileMenu.classList.add('hidden');
     
-    // Reset Nav Active State
     DOM.navLinks.forEach(link => link.classList.remove('active'));
     DOM.mobileNavLinks.forEach(link => link.classList.remove('active'));
-
-    // Highlight active nav
     const activeNav = document.querySelector(`[data-page="${pageName}"]`);
     if(activeNav) activeNav.classList.add('active');
 
-    // Logic
     if (pageName === 'home') {
         DOM.homeView.classList.remove('hidden');
         DOM.searchInput.value = '';
@@ -986,13 +963,12 @@ function navigateTo(pageName, data = null) {
         DOM.listingView.classList.remove('hidden');
         DOM.listingTitle.textContent = data.title;
         state.listing.currentPage = 1;
-        updateListingView(data.items); // Use custom items
+        updateListingView(data.items);
     }
     else if (pageName === 'favorites') {
         DOM.favoritesView.classList.remove('hidden');
         loadFavoritesPage();
     }
-    
     window.scrollTo(0, 0);
 }
 
@@ -1023,16 +999,12 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.searchInput.addEventListener('input', performSearch);
         DOM.clearSearchBtn.addEventListener('click', () => {
             DOM.searchInput.value = '';
-            state.listing.searchQuery = ''; // Clear search state
+            state.listing.searchQuery = ''; 
             navigateTo('home');
         });
         
-        DOM.navLinks.forEach(link => {
-            link.addEventListener('click', (e) => navigateTo(e.target.dataset.page));
-        });
-        DOM.mobileNavLinks.forEach(link => {
-            link.addEventListener('click', (e) => navigateTo(e.target.dataset.page));
-        });
+        DOM.navLinks.forEach(link => link.addEventListener('click', (e) => navigateTo(e.target.dataset.page)));
+        DOM.mobileNavLinks.forEach(link => link.addEventListener('click', (e) => navigateTo(e.target.dataset.page)));
         
         DOM.closeDetailBtn.addEventListener('click', () => { DOM.detailModal.classList.add('hidden'); document.body.style.overflow = ''; });
         DOM.closeVideoBtn.addEventListener('click', window.closeVideoPlayer);
@@ -1043,11 +1015,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (contentRows) {
             contentRows.addEventListener('wheel', (evt) => {
                 const slider = evt.target.closest('.row-slider');
-                if (slider) {
-                    if (slider.scrollWidth > slider.clientWidth) {
-                        evt.preventDefault();
-                        slider.scrollLeft += evt.deltaY; 
-                    }
+                if (slider && slider.scrollWidth > slider.clientWidth) {
+                    evt.preventDefault();
+                    slider.scrollLeft += evt.deltaY; 
                 }
             }, { passive: false });
         }
