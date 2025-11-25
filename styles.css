@@ -2,6 +2,7 @@
    1. Variables & Reset
    ========================================= */
 :root {
+    /* Colors */
     --bg-main: #141414;
     --bg-card: #1f1f1f;
     --bg-overlay: rgba(0, 0, 0, 0.7);
@@ -11,13 +12,16 @@
     --text-muted: #b3b3b3;
     --border-color: #333;
 
+    /* Typography */
     --font-main: 'Inter', sans-serif;
     
+    /* Spacing & Sizes */
     --header-height: 60px;
     --border-radius: 4px;
     --container-padding: 4%;
     --transition-speed: 0.3s;
 
+    /* Z-Index Layers */
     --z-header: 100;
     --z-modal: 1000;
     --z-toast: 2000;
@@ -38,18 +42,21 @@ body {
     overflow-x: hidden;
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar for Page (Vertical) */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
+
 ::-webkit-scrollbar-track {
     background: var(--bg-main);
 }
+
 ::-webkit-scrollbar-thumb {
     background: #444;
     border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
@@ -164,6 +171,7 @@ body {
     display: block;
 }
 
+/* Mobile Dropdown */
 .mobile-menu {
     position: fixed;
     top: var(--header-height);
@@ -186,6 +194,7 @@ body {
     cursor: pointer;
 }
 
+/* Badge */
 #fav-count-badge {
     background-color: var(--primary-red);
     color: white;
@@ -197,7 +206,7 @@ body {
 }
 
 /* =========================================
-   3. Main Content & Hero (SPLIT LAYOUT)
+   3. Main Content & Hero
    ========================================= */
 #main-content {
     padding-top: var(--header-height);
@@ -230,8 +239,6 @@ body {
     background-size: cover;
     background-position: center top;
     background-repeat: no-repeat;
-    
-    /* Sliding Animation */
     transform: translateX(100%); 
     transition: transform 0.8s ease-in-out; 
     z-index: 1;
@@ -247,15 +254,15 @@ body {
     z-index: 1;
 }
 
-/* Static Text Layer (Fixed Position) */
+/* Static Text Layer */
 .hero-static-layer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 10; /* Above images */
-    pointer-events: none; /* Let clicks pass through to dots */
+    z-index: 10; 
+    pointer-events: none; 
 }
 
 /* Promo Ribbon */
@@ -283,19 +290,13 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    
-    /* Gradient Overlay sits here inside static layer? 
-       Actually, it's better in the image slide, BUT user wants text separate.
-       We put gradient in the slide via CSS linear-gradient on bg-image.
-    */
 }
 
 .hero-content {
     max-width: 800px;
-    pointer-events: auto; /* Re-enable buttons */
+    pointer-events: auto; 
 }
 
-/* Text Fade Animation */
 .fade-in {
     animation: fadeIn 0.5s ease-out forwards;
 }
@@ -411,7 +412,7 @@ body {
 }
 
 /* =========================================
-   4. Content Rows
+   4. Content Rows (Horizontal Scroll Fixed)
    ========================================= */
 .rows-container {
     padding-bottom: 40px;
@@ -432,18 +433,37 @@ body {
     color: #e5e5e5;
 }
 
+/* UPDATED: Horizontal Scroll Styling */
 .row-slider {
     display: flex;
     gap: 10px;
-    overflow-x: auto;
+    overflow-x: auto; /* Enable scroll */
     padding-right: var(--container-padding);
     padding-bottom: 10px;
     scroll-behavior: smooth;
-    scrollbar-width: none; 
+    
+    /* Firefox Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-red) #1f1f1f;
 }
 
+/* Chrome/Safari/Webkit Scrollbar (Visible but Styled) */
 .row-slider::-webkit-scrollbar {
-    display: none; 
+    height: 8px;
+    display: block; /* Ensure it's visible on desktop */
+}
+
+.row-slider::-webkit-scrollbar-track {
+    background: #141414;
+}
+
+.row-slider::-webkit-scrollbar-thumb {
+    background-color: #333;
+    border-radius: 4px;
+}
+
+.row-slider::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary-red);
 }
 
 .movie-card {
@@ -550,6 +570,20 @@ body {
     flex-direction: column;
     gap: 15px;
     margin-bottom: 20px;
+}
+
+.filters-bar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filters-bar select, .filters-bar button {
+    background-color: black;
+    color: white;
+    border: 1px solid var(--border-color);
+    padding: 5px 10px;
+    border-radius: 2px;
 }
 
 .media-grid {
