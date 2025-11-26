@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Added 'Rating' filter (Col I) & 'Year' sort support (Latest First) in Config.
+ * Updated: Switched to Static JSON (GitHub Actions) + Fuse.js Search
  */
 
 'use strict';
@@ -10,15 +10,17 @@
 // =========================================
 
 const CONFIG = {
+    // These keys are no longer used for fetching in the frontend, 
+    // but kept here as requested to not delete existing variables.
     SPREADSHEET_ID: '1R4wubVoX0rjs8Xuu_7vwQ487e4X1ES-OlER0JgSZwjQ', 
-    API_KEY: 'AIzaSyAe26yWs-xvvTROq6HZ4bEKWbObMqSSHms', // Google Sheets API Key
+    API_KEY: 'AIzaSyAe26yWs-xvvTROq6HZ4bEKWbObMqSSHms', 
     
     SHEETS: { MOVIES: 'Movies', TV: 'TV_Shows', CONFIG: 'Config' },
     
     IMAGE_BASE_URL: 'https://image.tmdb.org/t/p/w500', 
     PLACEHOLDER_IMG: 'https://placehold.co/300x450/333/white?text=No+Poster',
     
-    ITEMS_PER_PAGE: 30, // Supports 5 full rows on Desktop
+    ITEMS_PER_PAGE: 30,
     PAGINATION_GROUP_SIZE: 5
 };
 
@@ -31,6 +33,9 @@ const state = {
     sliderInterval: null,
     currentSlideIndex: 0,
     heroItems: [],
+    
+    // Fuse.js Instance
+    fuse: null,
     
     // Listing / Search State
     listing: {
@@ -102,22 +107,8 @@ const DOM = {
 };
 
 // =========================================
-// 2. DATA FETCHING
+// 2. DATA FETCHING (MODIFIED FOR STATIC JSON)
 // =========================================
-
-async function fetchSheetData(sheetName) {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${sheetName}?key=${CONFIG.API_KEY}`;
-    try {
-        const response = await fetch(url);
-        if (!response.ok && sheetName === CONFIG.SHEETS.CONFIG) return [];
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        return data.values || [];
-    } catch (error) {
-        console.error(`Error fetching ${sheetName}:`, error);
-        return [];
-    }
-}
 
 function processPosterUrl(url) {
     if (!url) return CONFIG.PLACEHOLDER_IMG;
@@ -131,50 +122,88 @@ function processPosterUrl(url) {
     return cleanUrl;
 }
 
+// Helper: Parse Row (Extracted for reuse)
+function parseRow(row, type) {
+    let isBurmese = false;
+    let directorName = '';
+    let streamingPlatform = '';
+
+    if (type === 'Movie') {
+        isBurmese = (row[9] === 'TRUE');
+        directorName = row[10] || '';
+        streamingPlatform = row[11] || ''; 
+    } else {
+        isBurmese = (row[11] === 'TRUE');
+        directorName = row[12] || '';
+        streamingPlatform = row[13] || ''; 
+    }
+
+    return {
+        id: generateId(row[0]),
+        title: row[0] || 'Untitled',
+        year: row[1] || 'N/A',
+        language: row[2] || 'Unknown',
+        genre: row[3] ? row[3].split(',').map(g => g.trim()).filter(g => g) : [],
+        synopsis: row[4] || '',
+        cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
+        imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
+        posterUrl: processPosterUrl(row[7]),
+        trailerUrl: row[8] || '',
+        episodes: (type === 'TV Show' && row[9]) ? row[9].split('\n').filter(s => s.trim() !== '') : [],
+        subtitle: isBurmese ? 'Burmese Subtitle' : 'English Subtitle',
+        director: directorName,
+        type: type,
+        streaming: streamingPlatform,
+        originalRowIndex: 0 
+    };
+}
+
+// Helper: Process Config (Extracted for reuse)
+function processConfigData(configRaw) {
+    if (configRaw && configRaw.length > 1) {
+        configRaw.slice(1).forEach(row => {
+            const key = row[0] ? row[0].trim() : null;
+            const desc = row[1] ? row[1].trim() : null;
+            const listRaw = row[2];
+            const lang = row[3];
+            const genre = row[4];
+            const sort = row[5];
+            const type = row[6];
+            const platform = row[7];
+            const rating = row[8]; 
+
+            const hasCondition = (listRaw || lang || genre || sort || type || platform || rating);
+
+            if (key && desc && hasCondition) {
+                state.configData[key] = {
+                    description: desc,
+                    list: listRaw ? listRaw.split(',').map(t => t.trim()).filter(t => t) : [],
+                    language: lang ? lang.trim() : '',
+                    genre: genre ? genre.trim() : '',
+                    sort: sort ? sort.trim().toLowerCase() : 'random',
+                    type: type ? type.trim().toLowerCase() : '',
+                    platform: platform ? platform.trim() : '',
+                    rating: rating ? parseFloat(rating) : 0 
+                };
+            }
+        });
+    }
+}
+
 async function loadAllContent() {
     try {
-        const [moviesRaw, tvShowsRaw, configRaw] = await Promise.all([
-            fetchSheetData(CONFIG.SHEETS.MOVIES),
-            fetchSheetData(CONFIG.SHEETS.TV),
-            fetchSheetData(CONFIG.SHEETS.CONFIG)
-        ]);
+        // CHANGED: Fetch from local JSON file instead of Google Sheets API
+        const response = await fetch('./content.json');
+        if (!response.ok) throw new Error('Failed to load local content.json');
+        
+        const data = await response.json();
+        
+        // Validate Data Structure
+        const moviesRaw = data.movies || [];
+        const tvShowsRaw = data.tv || [];
+        const configRaw = data.config || [];
 
         const isValidRow = (row) => (row[0] && row[0].trim() !== '') || (row[1] && row[1].trim() !== '');
-
-        const parseRow = (row, type) => {
-            let isBurmese = false;
-            let directorName = '';
-            let streamingPlatform = '';
-
-            if (type === 'Movie') {
-                isBurmese = (row[9] === 'TRUE');
-                directorName = row[10] || '';
-                streamingPlatform = row[11] || ''; 
-            } else {
-                isBurmese = (row[11] === 'TRUE');
-                directorName = row[12] || '';
-                streamingPlatform = row[13] || ''; 
-            }
-
-            return {
-                id: generateId(row[0]),
-                title: row[0] || 'Untitled',
-                year: row[1] || 'N/A',
-                language: row[2] || 'Unknown',
-                genre: row[3] ? row[3].split(',').map(g => g.trim()).filter(g => g) : [],
-                synopsis: row[4] || '',
-                cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
-                imdb: row[6] === 'N/A' ? 0 : parseFloat(row[6]) || 0,
-                posterUrl: processPosterUrl(row[7]),
-                trailerUrl: row[8] || '',
-                episodes: (type === 'TV Show' && row[9]) ? row[9].split('\n').filter(s => s.trim() !== '') : [],
-                subtitle: isBurmese ? 'Burmese Subtitle' : 'English Subtitle',
-                director: directorName,
-                type: type,
-                streaming: streamingPlatform,
-                originalRowIndex: 0 
-            };
-        };
 
         const movies = moviesRaw.slice(1).filter(isValidRow).map((row, idx) => {
             let m = parseRow(row, 'Movie'); m.originalRowIndex = idx; return m;
@@ -184,42 +213,28 @@ async function loadAllContent() {
         });
 
         state.allContent = [...movies, ...tvShows];
+        
+        // Initialize Fuse.js for Search
+        const fuseOptions = {
+            keys: [
+                { name: 'title', weight: 0.4 },
+                { name: 'cast', weight: 0.2 },
+                { name: 'director', weight: 0.2 },
+                { name: 'genre', weight: 0.1 },
+                { name: 'year', weight: 0.1 }
+            ],
+            threshold: 0.3, // Fuzzy match threshold
+            ignoreLocation: true
+        };
+        state.fuse = new Fuse(state.allContent, fuseOptions);
 
-        // --- Process Config ---
-        if (configRaw && configRaw.length > 1) {
-            configRaw.slice(1).forEach(row => {
-                const key = row[0] ? row[0].trim() : null;
-                const desc = row[1] ? row[1].trim() : null;
-                const listRaw = row[2];
-                const lang = row[3];
-                const genre = row[4];
-                const sort = row[5];
-                const type = row[6];
-                const platform = row[7];
-                const rating = row[8]; // Column I: Rating Filter
-
-                const hasCondition = (listRaw || lang || genre || sort || type || platform || rating);
-
-                if (key && desc && hasCondition) {
-                    state.configData[key] = {
-                        description: desc,
-                        list: listRaw ? listRaw.split(',').map(t => t.trim()).filter(t => t) : [],
-                        language: lang ? lang.trim() : '',
-                        genre: genre ? genre.trim() : '',
-                        sort: sort ? sort.trim().toLowerCase() : 'random',
-                        type: type ? type.trim().toLowerCase() : '',
-                        platform: platform ? platform.trim() : '',
-                        rating: rating ? parseFloat(rating) : 0 // Parse Rating
-                    };
-                }
-            });
-        }
+        processConfigData(configRaw);
 
         populateFilterOptions(); 
         if(DOM.homeView) initApp();
     } catch (error) {
-        console.error(error);
-        if(DOM.loadingScreen) DOM.loadingScreen.innerHTML = '<p>Error loading data. Check console.</p>';
+        console.error("Data Load Error:", error);
+        if(DOM.loadingScreen) DOM.loadingScreen.innerHTML = '<p>Error loading data. Try refreshing the page.</p>';
     }
 }
 
@@ -253,37 +268,28 @@ function getSortedByRecency(items) {
     return combined;
 }
 
-/**
- * Filters and Sorts items based on Config Rules.
- * Updated to include Rating Filter and Year Sort.
- */
 function getItemsFromConfig(config) {
     let items = [...state.allContent];
 
-    // Filter by List
     if (config.list && config.list.length > 0) {
         return config.list.map(title => items.find(i => i.title.toLowerCase() === title.toLowerCase())).filter(item => item !== undefined);
     }
 
-    // Filter by Type
     if (config.type) {
         if (config.type.includes('tv')) items = items.filter(i => i.type === 'TV Show');
         else if (config.type.includes('movie')) items = items.filter(i => i.type === 'Movie');
     }
 
-    // Filter by Language
     if (config.language) {
         const langTarget = config.language.toLowerCase();
         items = items.filter(i => i.language.toLowerCase().includes(langTarget));
     }
 
-    // Filter by Genre
     if (config.genre) {
         const genreTarget = config.genre.toLowerCase();
         items = items.filter(i => i.genre.some(g => g.toLowerCase().includes(genreTarget)));
     }
 
-    // Filter by Platform
     if (config.platform) {
         const target = normalizeStr(config.platform);
         items = items.filter(i => {
@@ -293,16 +299,13 @@ function getItemsFromConfig(config) {
         });
     }
 
-    // Filter by Rating (New)
     if (config.rating && config.rating > 0) {
         items = items.filter(i => i.imdb >= config.rating);
     }
 
-    // Sort Logic
     if (config.sort === 'latest') {
         items = getSortedByRecency(items);
     } else if (config.sort === 'year') {
-        // Sort by Year (Latest first)
         items.sort((a, b) => {
             const yA = parseInt(a.year) || 0;
             const yB = parseInt(b.year) || 0;
@@ -336,7 +339,6 @@ function populateFilterOptions(typeFilter = null) {
 
     if (!state.allContent || state.allContent.length === 0) return;
 
-    // Filter source content based on type if provided
     const contentToProcess = typeFilter 
         ? state.allContent.filter(item => item.type === typeFilter)
         : state.allContent;
@@ -353,7 +355,6 @@ function populateFilterOptions(typeFilter = null) {
         const select = document.getElementById(elementId);
         if(!select) return;
         
-        // Preserve label
         const labelOption = select.firstElementChild;
         select.innerHTML = '';
         if(labelOption) select.appendChild(labelOption);
@@ -548,7 +549,6 @@ function startSliderInterval() {
 function renderHomeRows() {
     DOM.contentRows.innerHTML = '';
     
-    // 1. Recently Added Movies (Newest First)
     const recentMovies = state.allContent
         .filter(item => item.type === 'Movie')
         .sort((a, b) => b.originalRowIndex - a.originalRowIndex);
@@ -557,7 +557,6 @@ function renderHomeRows() {
         createRow('Recently Added Movies', recentMovies);
     }
 
-    // 2. Recently Added TV Shows (Newest First)
     const recentTV = state.allContent
         .filter(item => item.type === 'TV Show')
         .sort((a, b) => b.originalRowIndex - a.originalRowIndex);
@@ -566,7 +565,6 @@ function renderHomeRows() {
         createRow('Recently Added TV Shows', recentTV);
     }
 
-    // 3. Config Rows
     for(let i=1; i<=20; i++) {
         const key = `row_${i}`;
         if (state.configData[key]) {
@@ -654,7 +652,7 @@ function openListingFromRow(title) {
 }
 
 // =========================================
-// 5. MAIN LISTING VIEW UPDATE
+// 5. MAIN LISTING VIEW UPDATE (MODIFIED FOR FUSE.JS)
 // =========================================
 
 function updateListingView(customItems = null) {
@@ -663,7 +661,6 @@ function updateListingView(customItems = null) {
     if (customItems) {
         items = customItems;
     } else {
-        // Start with all content
         items = state.allContent;
 
         // 1. Filter by Type
@@ -671,15 +668,19 @@ function updateListingView(customItems = null) {
             items = items.filter(i => i.type === state.listing.currentFilterType);
         }
 
-        // 2. Filter by Search Query
-        if (state.listing.searchQuery) {
-            const q = state.listing.searchQuery.toLowerCase();
-            items = items.filter(i => 
-                i.title.toLowerCase().includes(q) || 
-                i.cast.some(c => c.toLowerCase().includes(q)) ||
-                (i.director && i.director.toLowerCase().includes(q)) ||
-                i.genre.some(g => g.toLowerCase().includes(q))
-            );
+        // 2. Filter by Search Query (USING FUSE.JS)
+        if (state.listing.searchQuery && state.fuse) {
+            const results = state.fuse.search(state.listing.searchQuery);
+            const searchResults = results.map(r => r.item);
+            
+            // Intersect Fuse results with current items (type filtered)
+            // If we have a type filter, we must ensure search results respect it
+            if (state.listing.currentFilterType) {
+                 // Optimization: Fuse already searched everything, just filter the results again
+                 items = searchResults.filter(i => i.type === state.listing.currentFilterType);
+            } else {
+                 items = searchResults;
+            }
         }
 
         // 3. Dropdown Filters
@@ -967,7 +968,7 @@ function navigateTo(pageName, data = null) {
         DOM.listingTitle.textContent = 'Movies';
         resetFilters();
         state.listing.currentFilterType = 'Movie';
-        populateFilterOptions('Movie'); // UPDATED: Filter dropdowns for Movies
+        populateFilterOptions('Movie'); 
         state.listing.searchQuery = '';
         state.listing.currentPage = 1;
         updateListingView();
@@ -977,7 +978,7 @@ function navigateTo(pageName, data = null) {
         DOM.listingTitle.textContent = 'TV Shows';
         resetFilters();
         state.listing.currentFilterType = 'TV Show';
-        populateFilterOptions('TV Show'); // UPDATED: Filter dropdowns for TV
+        populateFilterOptions('TV Show'); 
         state.listing.searchQuery = '';
         state.listing.currentPage = 1;
         updateListingView();
@@ -985,14 +986,13 @@ function navigateTo(pageName, data = null) {
     else if (pageName === 'listing-mixed' || pageName === 'search-results') {
         DOM.listingView.classList.remove('hidden');
         DOM.listingTitle.textContent = pageName === 'search-results' ? 'Search Results' : 'Browse';
-        populateFilterOptions(null); // UPDATED: Show all options
+        populateFilterOptions(null); 
         state.listing.currentPage = 1;
         updateListingView();
     }
     else if (pageName === 'listing-custom') {
         DOM.listingView.classList.remove('hidden');
         DOM.listingTitle.textContent = data.title;
-        // Default to all options or specific type if needed, but 'null' is safest default here
         populateFilterOptions(null); 
         state.listing.currentPage = 1;
         updateListingView(data.items);
