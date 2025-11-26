@@ -1,8 +1,8 @@
 /**
  * ShowCase - Netflix-style Catalog App
  * Updated: 
- * 1. Shows Count in Listing Header (Updates with Filters)
- * 2. Static JSON + Fuse.js + Genre Normalization
+ * 1. Smart Search: Prioritizes Exact Cast/Director matches, falls back to Fuzzy for Titles/Typos.
+ * 2. Includes all previous features (Genre Fixes, Count Header, GitHub JSON).
  */
 
 'use strict';
@@ -70,7 +70,7 @@ const state = {
         currentPage: 1,
         currentFilterType: '', 
         searchQuery: '',
-        baseTitle: 'Listing', // NEW: Tracks the current page title (e.g. "Movies")
+        baseTitle: 'Listing', 
         filters: {
             language: '',
             year: '',
@@ -172,7 +172,7 @@ function parseRow(row, type) {
         year: row[1] || 'N/A',
         language: row[2] || 'Unknown',
         
-        // --- GENRE LOGIC (Fixes Duplicates & Casing) ---
+        // --- GENRE LOGIC ---
         genre: row[3] ? row[3].split(',').map(g => {
             let clean = g.trim();
             if (!clean) return null;
@@ -182,10 +182,10 @@ function parseRow(row, type) {
             // 1. Check strict overrides (Synonyms/Typos)
             if (GENRE_FIXES[lower]) return GENRE_FIXES[lower];
             
-            // 2. Auto-fix Casing (e.g. "nature documentary" -> "Nature Documentary")
+            // 2. Auto-fix Casing
             return clean.replace(/\w\S*/g, (w) => (w.replace(/^\w/, (c) => c.toUpperCase())));
         }).filter(g => g) : [],
-        // ---------------------------
+        // -------------------
         
         synopsis: row[4] || '',
         cast: row[5] ? row[5].split(',').map(c => c.trim()) : [],
@@ -308,7 +308,6 @@ function getSortedByRecency(items) {
     return combined;
 }
 
-// Updated: Includes Genre Fixes for Config Filters
 function getItemsFromConfig(config) {
     let items = [...state.allContent];
 
@@ -328,7 +327,6 @@ function getItemsFromConfig(config) {
 
     if (config.genre) {
         let genreTarget = config.genre.toLowerCase();
-        // Check fixes
         if (GENRE_FIXES[genreTarget]) {
             genreTarget = GENRE_FIXES[genreTarget].toLowerCase();
         }
@@ -697,7 +695,7 @@ function openListingFromRow(title) {
 }
 
 // =========================================
-// 5. MAIN LISTING VIEW UPDATE (UPDATED WITH COUNT)
+// 5. MAIN LISTING VIEW UPDATE (SMART SEARCH UPDATED)
 // =========================================
 
 function updateListingView(customItems = null) {
@@ -713,12 +711,34 @@ function updateListingView(customItems = null) {
             items = items.filter(i => i.type === state.listing.currentFilterType);
         }
 
-        // 2. Filter by Search Query (USING FUSE.JS)
-        if (state.listing.searchQuery && state.fuse) {
-            const results = state.fuse.search(state.listing.searchQuery);
-            const searchResults = results.map(r => r.item);
-            
-            // Intersect Fuse results with current items (type filtered)
+        // 2. Filter by Search Query
+        if (state.listing.searchQuery) {
+            const q = state.listing.searchQuery.toLowerCase().trim();
+            let searchResults = [];
+
+            // A. Priority Search: Exact Cast/Director Match
+            // (Solves "Christopher Nolan" vs "Christopher Lloyd")
+            const exactPeople = state.allContent.filter(item => {
+                const dir = item.director ? item.director.toLowerCase() : '';
+                const cast = item.cast ? item.cast.map(c => c.toLowerCase()) : [];
+                
+                // Check Exact Matches
+                if (dir === q) return true;
+                if (cast.includes(q)) return true;
+                return false;
+            });
+
+            if (exactPeople.length > 0) {
+                // If query is an exact person name, SHOW ONLY THEIR MOVIES
+                searchResults = exactPeople;
+            } else if (state.fuse) {
+                // B. Fallback: Fuzzy Search 
+                // (Solves "Avengrs" -> "Avengers", or partial names like "Christopher")
+                const results = state.fuse.search(state.listing.searchQuery);
+                searchResults = results.map(r => r.item);
+            }
+
+            // Apply search results to current items (respecting Type filter)
             if (state.listing.currentFilterType) {
                  items = searchResults.filter(i => i.type === state.listing.currentFilterType);
             } else {
@@ -745,11 +765,9 @@ function updateListingView(customItems = null) {
 
     state.listing.activeItems = items;
     
-    // --- NEW: UPDATE TITLE WITH COUNT ---
+    // Header Count Update
     const count = state.listing.activeItems.length;
-    // We use the stored baseTitle (e.g. "Movies") and append the count
     DOM.listingTitle.innerHTML = `${state.listing.baseTitle} <span style="font-size: 0.7em; opacity: 0.7; margin-left: 10px;">(${count})</span>`;
-    // ------------------------------------
     
     renderListingGrid();
     renderPagination();
@@ -994,7 +1012,7 @@ function showToast(msg) {
 }
 
 // =========================================
-// 7. NAVIGATION (UPDATED TO TRACK TITLE)
+// 7. NAVIGATION
 // =========================================
 
 function navigateTo(pageName, data = null) {
@@ -1015,7 +1033,7 @@ function navigateTo(pageName, data = null) {
     } 
     else if (pageName === 'movies') {
         DOM.listingView.classList.remove('hidden');
-        state.listing.baseTitle = 'Movies'; // Store title
+        state.listing.baseTitle = 'Movies';
         resetFilters();
         state.listing.currentFilterType = 'Movie';
         populateFilterOptions('Movie'); 
@@ -1025,7 +1043,7 @@ function navigateTo(pageName, data = null) {
     }
     else if (pageName === 'tv') {
         DOM.listingView.classList.remove('hidden');
-        state.listing.baseTitle = 'TV Shows'; // Store title
+        state.listing.baseTitle = 'TV Shows';
         resetFilters();
         state.listing.currentFilterType = 'TV Show';
         populateFilterOptions('TV Show'); 
