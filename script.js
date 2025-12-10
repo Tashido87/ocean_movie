@@ -1,6 +1,10 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Reverted Cast View to Search-based navigation
+ * Updated: 
+ * 1. Fixed Related Items Navigation
+ * 2. Restored Swipe-to-Back (Edge Swipe)
+ * 3. Logo Home Link
+ * 4. Beautiful Season/Episode HTML Generation
  */
 
 'use strict';
@@ -26,6 +30,7 @@ const GENRE_FIXES = {
 
 const state = {
     allContent: [],
+    castData: {}, 
     favorites: JSON.parse(localStorage.getItem('showcase_favorites')) || [],
     configData: {}, 
     currentView: 'home', 
@@ -56,6 +61,7 @@ const state = {
 const DOM = {
     app: document.getElementById('app'),
     header: document.getElementById('main-header'),
+    logo: document.querySelector('.logo'), // Added Logo reference
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     mobileMenu: document.getElementById('mobile-menu'),
     searchInput: document.getElementById('search-input'),
@@ -391,7 +397,7 @@ function renderSearchResults(query) {
     }
 }
 
-// Restore: Search by Cast Click
+// Search by Cast Click
 window.searchByCast = function(name) {
     DOM.detailModal.classList.add('hidden');
     document.body.style.overflow = '';
@@ -549,6 +555,10 @@ window.openDetailModal = function(id) {
     const item = state.allContent.find(i => i.id === id);
     if (!item) return;
 
+    // Reset scroll to top for new item
+    DOM.detailModal.scrollTo(0, 0); 
+    
+    // Save scroll position of underlying view
     state.scrollPositions[state.currentView] = window.scrollY;
 
     const isFav = state.favorites.includes(item.id);
@@ -580,6 +590,35 @@ window.openDetailModal = function(id) {
             </div>`;
     }
 
+    // --- HTML Generation for Seasons (Matching new CSS) ---
+    let episodesHTML = '';
+    if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
+        const episodeList = item.episodes.map(epString => {
+            const match = epString.match(/Season\s+(\d+)\s*\((\d+)/i);
+            
+            if (match) {
+                const seasonNum = match[1].padStart(2, '0'); // 01, 02
+                const epCount = match[2];
+                return `
+                    <div class="season-item">
+                        <div class="season-name">SEASON ${seasonNum}</div>
+                        <div class="season-episodes"><i class="fa-solid fa-layer-group"></i> ${epCount} Episodes</div>
+                    </div>`;
+            } else {
+                return `<div class="season-item"><div class="season-name">${epString}</div></div>`;
+            }
+        }).join('');
+
+        episodesHTML = `
+            <div class="detail-section">
+                <span class="detail-label">Seasons</span>
+                <div class="season-list">
+                    ${episodeList}
+                </div>
+            </div>`;
+    }
+    // ----------------------------
+
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
             <div class="hero-backdrop" style="background-image: url('${item.posterUrl}')"></div>
@@ -606,6 +645,8 @@ window.openDetailModal = function(id) {
 
             <p class="modal-description">${item.synopsis}</p>
             
+            ${episodesHTML}
+
             <div class="detail-section">
                 <span class="detail-label">Details</span>
                 <div class="detail-content">
@@ -627,12 +668,17 @@ window.openDetailModal = function(id) {
     DOM.detailModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     
+    // Explicitly handle related links to ensure clean transition
+    // Previously, an override here caused bugs. Now we just rely on the onclick inline 
+    // or add a simple logic to ensure scrolling resets.
     const relatedLinks = DOM.modalBody.querySelectorAll('.related-grid .movie-card');
     relatedLinks.forEach(card => {
-        card.onclick = (e) => {
+        // We do NOT override onclick completely, we just add an extra listener for UX
+        card.addEventListener('click', (e) => {
+            // Note: The inline onclick="openDetailModal()" handles the data loading.
+            // This listener just ensures we don't bubble weirdly if needed.
             e.stopPropagation();
-            DOM.detailModal.scrollTo(0, 0);
-        };
+        });
     });
 };
 
@@ -678,6 +724,30 @@ window.closeVideoPlayer = function() {
 // =========================================
 // 9. HELPER FUNCTIONS
 // =========================================
+
+function setupSwipeGestures() {
+    const modal = DOM.detailModal;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    modal.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, {passive: true});
+
+    modal.addEventListener('touchend', e => {
+        const touchEndX = e.changedTouches[0].screenX;
+        const touchEndY = e.changedTouches[0].screenY;
+        
+        const diffX = touchEndX - touchStartX;
+        const diffY = Math.abs(touchEndY - touchStartY);
+
+        // Logic: Swipe Right (> 50px), mostly horizontal, started from left edge (25% of screen)
+        if (diffX > 50 && diffX > diffY && touchStartX < window.innerWidth * 0.25) {
+            DOM.closeDetailBtn.click(); 
+        }
+    }, {passive: true});
+}
 
 function debounce(func, wait) {
     let timeout;
@@ -753,6 +823,7 @@ function populateFilterOptions(typeFilter = null) {
 function initApp() {
     updateFavCount();
     setupEventListeners();
+    setupSwipeGestures(); // Enable Swipe Back
     renderHomeRows();
     handleHashChange(); 
     
@@ -762,6 +833,17 @@ function initApp() {
 function setupEventListeners() {
     window.addEventListener('hashchange', handleHashChange);
     
+    // Logo Home Link (Item 5)
+    if(DOM.logo) {
+        DOM.logo.addEventListener('click', () => {
+            if (state.currentView !== 'home') {
+                navigateTo('home');
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    }
+
     DOM.navLinks.forEach(link => link.addEventListener('click', (e) => {
         const page = e.target.dataset.page;
         navigateTo(page);
