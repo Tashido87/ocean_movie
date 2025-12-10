@@ -10,11 +10,6 @@ async function fetchSheet(sheetName) {
     const response = await fetch(url);
     
     if (!response.ok) {
-        // If a specific sheet (like 'Cast') is missing, we might not want to crash the whole build
-        if (response.status === 400 || response.status === 404) {
-            console.warn(`⚠️ Warning: Sheet '${sheetName}' not found. Skipping...`);
-            return [];
-        }
         throw new Error(`Failed to fetch ${sheetName}: ${response.statusText}`);
     }
 
@@ -26,24 +21,21 @@ async function run() {
     try {
         console.log("🌊 Connecting to Google Sheets...");
         
-        // 2. Download all tabs in parallel (Added 'Cast' tab)
-        const [movies, tv, config, cast] = await Promise.all([
+        // 2. Download tabs in parallel (Removed 'Cast')
+        const [movies, tv, config] = await Promise.all([
             fetchSheet('Movies'),
             fetchSheet('TV_Shows'),
-            fetchSheet('Config'),
-            fetchSheet('Cast') // New Cast Tab
+            fetchSheet('Config')
         ]);
 
         console.log(`✅ Downloaded ${movies.length} Movies`);
         console.log(`✅ Downloaded ${tv.length} TV Shows`);
-        console.log(`✅ Downloaded ${cast.length} Cast Members`);
 
         // 3. Structure the data
         const data = {
             movies: movies,
             tv: tv,
             config: config,
-            cast: cast, // Include cast data in JSON
             updatedAt: new Date().toISOString()
         };
 
