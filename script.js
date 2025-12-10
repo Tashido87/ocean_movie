@@ -1,8 +1,11 @@
 /**
  * ShowCase - Netflix-style Catalog App
  * Updated: 
- * 1. Smart Search: Prioritizes Exact Cast/Director matches, falls back to Fuzzy for Titles/Typos.
- * 2. Includes all previous features (Genre Fixes, Count Header, GitHub JSON).
+ * 1. Smart Search & Filters.
+ * 2. Image Preloading (Instant Reveal).
+ * 3. SWIPE GESTURES:
+ * - Hero Banner: Swipe Left/Right to change slides.
+ * - Detail Page: Swipe Right to close (Go Back).
  */
 
 'use strict';
@@ -361,18 +364,129 @@ function getItemsFromConfig(config) {
     return items;
 }
 
+// --- NEW PRELOADER FUNCTIONS ---
+
+function preloadImage(url) {
+    return new Promise((resolve) => {
+        if (!url) { resolve(); return; }
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); 
+        img.src = url;
+    });
+}
+
+async function preloadViewportImages() {
+    const promises = [];
+
+    // 1. Preload Hero Image
+    if (state.heroItems && state.heroItems.length > 0) {
+        promises.push(preloadImage(state.heroItems[0].posterUrl));
+    }
+
+    // 2. Preload First 18 Thumbnails
+    const images = document.querySelectorAll('#content-rows img');
+    const limit = Math.min(images.length, 18); 
+    
+    for (let i = 0; i < limit; i++) {
+        const src = images[i].getAttribute('src');
+        if (src && src !== CONFIG.PLACEHOLDER_IMG) {
+            promises.push(preloadImage(src));
+        }
+    }
+
+    await Promise.all(promises);
+}
+
+// --- NEW SWIPE GESTURE SETUP ---
+function setupSwipeGestures() {
+    // 1. Hero Slider Swipe (Left/Right)
+    if (DOM.heroWrapper) {
+        let heroStartX = 0;
+        let heroStartY = 0;
+
+        DOM.heroWrapper.addEventListener('touchstart', (e) => {
+            heroStartX = e.changedTouches[0].screenX;
+            heroStartY = e.changedTouches[0].screenY;
+            clearInterval(state.sliderInterval); // Stop auto-slide while touching
+        }, {passive: true});
+
+        DOM.heroWrapper.addEventListener('touchend', (e) => {
+            const heroEndX = e.changedTouches[0].screenX;
+            const heroEndY = e.changedTouches[0].screenY;
+            
+            const diffX = heroStartX - heroEndX;
+            const diffY = heroStartY - heroEndY;
+
+            // Check if movement is primarily horizontal & long enough (> 50px)
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+                if (diffX > 0) {
+                    // Swipe Left -> Next Slide
+                    let next = state.currentSlideIndex + 1;
+                    if (next >= state.heroItems.length) next = 0;
+                    goToSlide(next);
+                } else {
+                    // Swipe Right -> Prev Slide
+                    let prev = state.currentSlideIndex - 1;
+                    if (prev < 0) prev = state.heroItems.length - 1;
+                    goToSlide(prev);
+                }
+            }
+            startSliderInterval(); // Resume auto-slide
+        }, {passive: true});
+    }
+
+    // 2. Detail Modal Swipe (Left to Right -> Close)
+    if (DOM.detailModal) {
+        let modalStartX = 0;
+        let modalStartY = 0;
+
+        DOM.detailModal.addEventListener('touchstart', (e) => {
+            modalStartX = e.changedTouches[0].screenX;
+            modalStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+
+        DOM.detailModal.addEventListener('touchend', (e) => {
+            const modalEndX = e.changedTouches[0].screenX;
+            const modalEndY = e.changedTouches[0].screenY;
+
+            const diffX = modalEndX - modalStartX; // Positive = Right
+            const diffY = modalEndY - modalStartY;
+
+            // Threshold 80px, must be horizontal
+            if (Math.abs(diffX) > Math.abs(diffY) && diffX > 80) {
+                // Close Modal (Go Back)
+                DOM.detailModal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
+        }, {passive: true});
+    }
+}
+
 // =========================================
 // 4. UI RENDERING & FILTER LOGIC
 // =========================================
 
-function initApp() {
-    DOM.loadingScreen.classList.add('hidden');
-    DOM.homeView.classList.remove('hidden');
+async function initApp() {
+    // 1. Render the structure
     updateFavCount();
-    
     setupHeroSlider();
     renderHomeRows();
     setupFilterEventListeners();
+    
+    // 2. Initialize Swipe Gestures
+    setupSwipeGestures();
+
+    // 3. Wait for visible images to load
+    try {
+        await preloadViewportImages();
+    } catch (error) {
+        console.warn("Preloading warning:", error);
+    }
+
+    // 4. Reveal Page
+    DOM.loadingScreen.classList.add('hidden');
+    DOM.homeView.classList.remove('hidden');
 }
 
 function populateFilterOptions(typeFilter = null) {
