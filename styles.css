@@ -21,7 +21,7 @@
     --header-height: 60px;
     --border-radius: 4px;
     --container-padding: 4%;
-    --section-spacing: 30px; /* Reduced from 60px */
+    --section-spacing: 30px;
     --transition-speed: 0.3s;
 
     /* Z-Index Layers */
@@ -194,7 +194,7 @@ body {
    ========================================= */
 #main-content {
     padding-top: var(--header-height);
-    flex: 1; /* Pushes footer down only if content is short */
+    flex: 1; 
     display: flex;
     flex-direction: column;
 }
@@ -352,11 +352,11 @@ body {
    4. Content Rows
    ========================================= */
 .rows-container {
-    padding-bottom: 20px; /* Reduced from 40px */
+    padding-bottom: 20px; 
     margin-top: -30px; 
     position: relative;
     z-index: 10;
-    margin-bottom: 20px; /* Reduced from var(--section-spacing) */
+    margin-bottom: 20px; 
 }
 
 .category-row {
@@ -475,9 +475,9 @@ body {
    5. Views & Grid
    ========================================= */
 .view-container {
-    padding: 20px var(--container-padding) 20px; /* Reduced bottom padding */
-    min-height: 50vh; /* Reduced constraint */
-    margin-bottom: 0; /* Removed margin */
+    padding: 20px var(--container-padding) 20px; 
+    min-height: 50vh; 
+    margin-bottom: 0; 
     animation: fadeIn 0.4s ease-out;
 }
 
@@ -651,7 +651,8 @@ body {
 .modal-fav-btn.active { color: var(--primary-red); border-color: var(--primary-red); }
 
 .modal-description {
-    font-size: 1.05rem; color: #eee; margin-bottom: 30px;
+    font-size: 0.9rem; 
+    color: #eee; margin-bottom: 30px;
     line-height: 1.6; max-width: 700px;
     white-space: pre-line;
 }
@@ -710,7 +711,7 @@ body {
     padding: 20px;
     text-align: center;
     border-top: 1px solid #222;
-    margin-top: auto; /* Ensures footer stays at the bottom */
+    margin-top: auto; 
     font-size: 0.85rem;
     color: #666;
 }
