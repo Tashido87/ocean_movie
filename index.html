@@ -7,7 +7,7 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
@@ -21,13 +21,14 @@
         <header id="main-header" class="header">
             <div class="header-container">
                 <div class="logo">
-                    <h1>OCEAN <span style="font-size: 0.7rem; color: #fff; opacity: 0.5;"></span></h1>
+                    <h1>OCEAN</h1>
                 </div>
                 
                 <div class="search-container">
                     <div class="search-box">
                         <i class="fa-solid fa-search search-icon"></i>
-                        <input type="text" id="search-input" placeholder="Search titles, genres...">
+                        <input type="text" id="search-input" placeholder="Search titles, cast, genres...">
+                        <span id="search-count-badge" class="search-count-badge hidden"></span>
                         <i class="fa-solid fa-times clear-search hidden" id="clear-search-btn"></i>
                     </div>
                 </div>
@@ -66,7 +67,7 @@
             <div id="home-view" class="view-container">
                 <section id="hero-wrapper" class="hero-wrapper">
                     <div class="hero-skeleton"></div> 
-                </section>
+                    </section>
 
                 <div id="content-rows" class="rows-container">
                     </div>
@@ -74,9 +75,13 @@
 
             <div id="search-view" class="view-container hidden">
                 <div class="section-header">
-                    <h2>Search Results <span id="search-count" class="text-muted"></span></h2>
+                    <h2>Search Results</h2>
                 </div>
                 <div id="search-results-grid" class="media-grid"></div>
+                <div id="search-empty-state" class="empty-state hidden">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <p>No results found for your query.</p>
+                </div>
             </div>
 
             <div id="favorites-view" class="view-container hidden">
@@ -88,6 +93,7 @@
                 <div id="no-favorites-msg" class="empty-state hidden">
                     <i class="fa-regular fa-heart"></i>
                     <p>You haven't added any titles to your list yet.</p>
+                    <button class="empty-btn" onclick="navigateTo('home')">Browse Content</button>
                 </div>
             </div>
 
@@ -103,13 +109,13 @@
                         
                         <select id="filter-language" class="filter-select">
                             <option value="">Language</option>
-                            </select>
+                        </select>
                         <select id="filter-year" class="filter-select">
                             <option value="">Year</option>
-                             </select>
+                        </select>
                         <select id="filter-genre" class="filter-select">
                             <option value="">Genre</option>
-                             </select>
+                        </select>
                         <select id="filter-subtitle" class="filter-select">
                             <option value="">Subtitle</option>
                             <option value="Burmese">Burmese</option>
@@ -120,11 +126,12 @@
                             <option value="year">Released Year</option>
                             <option value="title">Title (A-Z)</option>
                         </select>
-                        <button id="filter-clear-btn" class="secondary-btn">Clear</button>
+                        <button id="filter-clear-btn" class="secondary-btn" title="Clear Filters"><i class="fa-solid fa-trash"></i></button>
                     </div>
+                    <div id="active-filters" class="active-filters-container"></div>
                 </div>
                 
-                <div id="listing-grid" class="media-grid force-three-col">
+                <div id="listing-grid" class="media-grid">
                     </div>
                 
                 <div id="listing-pagination" class="pagination-container">
@@ -143,27 +150,20 @@
     <div id="detail-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <button class="close-modal-btn" id="close-detail-modal"><i class="fa-solid fa-times"></i></button>
-            <div class="modal-body" id="modal-body-content"></div>
+            <div class="modal-body" id="modal-body-content">
+                </div>
         </div>
     </div>
 
     <div id="video-modal" class="modal-backdrop hidden">
         <div class="video-modal-content">
-            <button class="close-modal-btn" id="close-video-modal"><i class="fa-solid fa-times"></i></button>
+            <button class="close-modal-btn" id="close-video-modal" style="top: -40px; right: 0;"><i class="fa-solid fa-times"></i></button>
             <div class="video-container">
                 <div id="youtube-player-placeholder"></div>
             </div>
         </div>
     </div>
     
-    <div id="grid-modal" class="modal-backdrop hidden">
-        <div class="grid-modal-content">
-            <button class="close-modal-btn" id="close-grid-modal"><i class="fa-solid fa-times"></i></button>
-            <h2 id="grid-modal-title" class="grid-modal-header">Category Title</h2>
-            <div id="grid-modal-body" class="grid-modal-body media-grid"></div>
-        </div>
-    </div>
-
     <div id="toast" class="toast hidden">
         <span id="toast-message">Action completed</span>
     </div>
