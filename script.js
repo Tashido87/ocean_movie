@@ -1,6 +1,6 @@
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: Restored Config-based Hero Banner logic
+ * Updated: Reverted Cast View to Search-based navigation
  */
 
 'use strict';
@@ -26,7 +26,6 @@ const GENRE_FIXES = {
 
 const state = {
     allContent: [],
-    castData: {}, 
     favorites: JSON.parse(localStorage.getItem('showcase_favorites')) || [],
     configData: {}, 
     currentView: 'home', 
@@ -164,20 +163,6 @@ function parseRow(row, type, index) {
     };
 }
 
-function processCastData(castSheet) {
-    if (!castSheet || castSheet.length < 2) return;
-    
-    castSheet.slice(1).forEach(row => {
-        if(row[0]) {
-            state.castData[row[0].trim().toLowerCase()] = {
-                name: row[0].trim(),
-                image: row[1] || '',
-                bio: row[2] || 'No biography available.'
-            };
-        }
-    });
-}
-
 function processConfigData(configRaw) {
     if (configRaw && configRaw.length > 1) {
         configRaw.slice(1).forEach(row => {
@@ -210,8 +195,6 @@ async function loadAllContent() {
 
         state.allContent = [...movies, ...tvShows];
         
-        if(data.cast) processCastData(data.cast);
-
         const fuseOptions = {
             keys: [
                 { name: 'title', weight: 0.4 },
@@ -255,10 +238,7 @@ function handleHashChange() {
     if (hash === 'movies') showView('movies');
     else if (hash === 'tv') showView('tv');
     else if (hash === 'favorites') showView('favorites');
-    else if (hash.startsWith('cast=')) {
-        const castName = decodeURIComponent(hash.split('=')[1]);
-        renderCastView(castName);
-    } else if (hash.startsWith('search=')) {
+    else if (hash.startsWith('search=')) {
         const query = decodeURIComponent(hash.split('=')[1]);
         DOM.searchInput.value = query;
         performSearch();
@@ -272,7 +252,6 @@ function navigateTo(pageName, param = null) {
     else if (pageName === 'movies') window.location.hash = 'movies';
     else if (pageName === 'tv') window.location.hash = 'tv';
     else if (pageName === 'favorites') window.location.hash = 'favorites';
-    else if (pageName === 'cast') window.location.hash = `cast=${encodeURIComponent(param)}`;
     else if (pageName === 'listing-custom') {
         state.listing.baseTitle = param.title;
         state.currentView = 'listing-custom';
@@ -300,10 +279,7 @@ function showView(viewName) {
     DOM.navLinks.forEach(link => link.classList.remove('active'));
     DOM.mobileNavLinks.forEach(link => link.classList.remove('active'));
     
-    let navKey = viewName;
-    if(viewName.startsWith('cast')) navKey = ''; 
-    
-    const activeNav = document.querySelector(`[data-page="${navKey}"]`);
+    const activeNav = document.querySelector(`[data-page="${viewName}"]`);
     if(activeNav) activeNav.classList.add('active');
 
     if (viewName === 'home') {
@@ -366,61 +342,6 @@ function createCardHTML(item) {
     `;
 }
 
-function renderCastView(castName) {
-    state.currentView = 'cast-view';
-    updateUIForView('listing-view');
-    
-    const lowerName = castName.toLowerCase();
-    let castInfo = state.castData[lowerName] || {
-        name: castName,
-        image: CONFIG.PLACEHOLDER_IMG,
-        bio: `Filmography for ${castName}. No biography available yet.`
-    };
-    
-    const credits = state.allContent.filter(item => 
-        item.cast.some(c => c.toLowerCase() === lowerName) || 
-        (item.director && item.director.toLowerCase() === lowerName)
-    );
-
-    DOM.listingTitle.innerHTML = 'Cast Details';
-    DOM.activeFiltersContainer.innerHTML = ''; 
-    DOM.listingFilters.container.classList.add('hidden');
-
-    const bioHTML = `
-        <div class="cast-view">
-            <div class="cast-header">
-                <img src="${castInfo.image}" alt="${castInfo.name}" class="cast-avatar" onerror="this.src='${CONFIG.PLACEHOLDER_IMG}'">
-                <div class="cast-bio-content">
-                    <h2>${castInfo.name}</h2>
-                    <p class="cast-bio-text">${castInfo.bio}</p>
-                </div>
-            </div>
-            <div class="cast-filmography">
-                <h3>Filmography <span style="font-size:0.7em; opacity:0.6">(${credits.length})</span></h3>
-            </div>
-        </div>
-    `;
-
-    DOM.listingGrid.innerHTML = bioHTML;
-    
-    const gridDiv = document.createElement('div');
-    gridDiv.className = 'media-grid';
-    
-    if (credits.length > 0) {
-        credits.forEach(item => {
-            const wrapper = document.createElement('div');
-            wrapper.innerHTML = createCardHTML(item);
-            gridDiv.appendChild(wrapper.firstElementChild);
-        });
-    } else {
-        gridDiv.innerHTML = '<p class="text-muted">No titles found in catalog.</p>';
-    }
-    
-    DOM.listingGrid.appendChild(gridDiv);
-    DOM.listingPagination.innerHTML = ''; 
-    window.scrollTo(0, 0);
-}
-
 // =========================================
 // 5. SEARCH LOGIC
 // =========================================
@@ -469,6 +390,14 @@ function renderSearchResults(query) {
         });
     }
 }
+
+// Restore: Search by Cast Click
+window.searchByCast = function(name) {
+    DOM.detailModal.classList.add('hidden');
+    document.body.style.overflow = '';
+    DOM.searchInput.value = name;
+    performSearch();
+};
 
 // =========================================
 // 6. LISTING & FILTERS
@@ -624,7 +553,7 @@ window.openDetailModal = function(id) {
 
     const isFav = state.favorites.includes(item.id);
     const castHTML = item.cast.length > 0 
-        ? item.cast.map(actor => `<span class="cast-link" onclick="navigateTo('cast', '${actor.replace(/'/g, "\\'")}')">${actor}</span>`).join('')
+        ? item.cast.map(actor => `<span class="cast-link" onclick="searchByCast('${actor.replace(/'/g, "\\'")}')">${actor}</span>`).join('')
         : 'N/A';
     
     let playButtonHTML = `<button class="primary-btn" disabled style="opacity:0.5; cursor:not-allowed"><i class="fa-solid fa-ban"></i> No Trailer</button>`;
@@ -886,11 +815,10 @@ function renderHomeRows() {
 
     if (state.configData['banner']) {
         const bannerConfig = state.configData['banner'];
-        promoText = bannerConfig.description; // Capture description
+        promoText = bannerConfig.description; 
         state.heroItems = getItemsFromConfig(bannerConfig);
     }
 
-    // Fallback if config is missing or empty
     if (state.heroItems.length === 0) {
         const highRated = state.allContent.filter(i => i.imdb >= 7.0 && i.posterUrl.startsWith('http'));
         state.heroItems = highRated.sort(() => 0.5 - Math.random()).slice(0, 8);
@@ -977,7 +905,6 @@ function renderHeroSlides(promoText = '') {
     const staticLayer = document.createElement('div');
     staticLayer.className = 'hero-static-layer';
     
-    // Inject Promo Ribbon if text exists
     let ribbonHTML = promoText ? `<div class="promo-ribbon">${promoText}</div>` : '';
 
     staticLayer.innerHTML = `
