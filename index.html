@@ -1,3 +1,7 @@
+{
+type: file
+fileName: ocean_movie_4/index.html
+fullContent:
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,7 +91,24 @@
             <div id="favorites-view" class="view-container hidden">
                 <div class="section-header">
                     <h2>My List</h2>
-                    <button id="clear-favorites" class="text-btn">Clear All</button>
+                    <div class="fav-controls-wrapper" style="display: flex; gap: 15px; align-items: center;">
+                        <select id="fav-type-filter" class="filter-select" style="min-width: 120px;">
+                            <option value="all">All Items</option>
+                            <option value="Movie">Movies Only</option>
+                            <option value="TV Show">TV Shows Only</option>
+                        </select>
+
+                        <div class="view-toggle-group" style="display: flex; gap: 5px; border: 1px solid #333; padding: 2px; border-radius: 4px;">
+                            <button id="fav-view-grid" class="icon-btn active" style="background: transparent; border: none; color: white; padding: 5px 10px; cursor: pointer;">
+                                <i class="fa-solid fa-border-all"></i>
+                            </button>
+                            <button id="fav-view-list" class="icon-btn" style="background: transparent; border: none; color: #777; padding: 5px 10px; cursor: pointer;">
+                                <i class="fa-solid fa-list"></i>
+                            </button>
+                        </div>
+
+                        <button id="clear-favorites" class="text-btn" style="color: var(--primary-red); font-size: 0.85rem;">Clear All</button>
+                    </div>
                 </div>
                 <div id="favorites-grid" class="media-grid"></div>
                 <div id="no-favorites-msg" class="empty-state hidden">
@@ -171,3 +192,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+}
