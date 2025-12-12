@@ -1,10 +1,10 @@
+
 /**
  * ShowCase - Netflix-style Catalog App
- * Updated: 
- * 1. Fixed Related Items Navigation
- * 2. Restored Swipe-to-Back (Edge Swipe)
- * 3. Logo Home Link
- * 4. Beautiful Season/Episode HTML Generation
+ * Updated Features:
+ * 1. Favorites: Grid/List Toggle & Type Filter
+ * 2. Clear All Confirmation
+ * 3. Share Button with Deep Linking (#view=id)
  */
 
 'use strict';
@@ -40,6 +40,10 @@ const state = {
     heroItems: [],
     scrollPositions: {}, 
     
+    // New Favorites State
+    favViewMode: 'grid', // 'grid' or 'list'
+    favFilter: 'all',    // 'all', 'Movie', 'TV Show'
+
     fuse: null,
     
     listing: {
@@ -61,7 +65,7 @@ const state = {
 const DOM = {
     app: document.getElementById('app'),
     header: document.getElementById('main-header'),
-    logo: document.querySelector('.logo'), // Added Logo reference
+    logo: document.querySelector('.logo'),
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     mobileMenu: document.getElementById('mobile-menu'),
     searchInput: document.getElementById('search-input'),
@@ -85,6 +89,12 @@ const DOM = {
     favoritesGrid: document.getElementById('favorites-grid'),
     favCountBadge: document.getElementById('fav-count-badge'),
     
+    // Favorites New Controls
+    favTypeFilter: document.getElementById('fav-type-filter'),
+    favViewGridBtn: document.getElementById('fav-view-grid'),
+    favViewListBtn: document.getElementById('fav-view-list'),
+    favClearBtn: document.getElementById('clear-favorites'),
+
     // Listing Elements
     listingTitle: document.getElementById('listing-title'),
     listingGrid: document.getElementById('listing-grid'),
@@ -241,6 +251,18 @@ function handleHashChange() {
         return;
     }
 
+    // Deep Linking Support: #view=some-id
+    if (hash.startsWith('view=')) {
+        const itemId = hash.split('=')[1];
+        if (DOM.detailModal.classList.contains('hidden')) {
+            if (state.currentView !== 'home' && state.currentView !== 'favorites' && !state.currentView.startsWith('listing')) {
+                 showView('home');
+            }
+        }
+        openDetailModal(itemId);
+        return;
+    }
+
     if (hash === 'movies') showView('movies');
     else if (hash === 'tv') showView('tv');
     else if (hash === 'favorites') showView('favorites');
@@ -344,6 +366,22 @@ function createCardHTML(item) {
                     <span>${item.type === 'TV Show' ? 'Series' : 'Movie'}</span>
                 </div>
             </div>
+        </div>
+    `;
+}
+
+function createListRowHTML(item) {
+    return `
+        <div class="list-item" onclick="openDetailModal('${item.id}')">
+            <img src="${item.posterUrl}" alt="${item.title}" onerror="this.src='${CONFIG.PLACEHOLDER_IMG}'">
+            <div class="list-item-info">
+                <div class="list-item-title">${item.title}</div>
+                <div class="list-item-meta">
+                    <span>${item.year}</span>
+                    <span class="list-type-badge">${item.type === 'TV Show' ? 'Series' : 'Movie'}</span>
+                </div>
+            </div>
+            ${state.favorites.includes(item.id) ? '<i class="fa-solid fa-heart" style="color:var(--primary-red)"></i>' : ''}
         </div>
     `;
 }
@@ -502,7 +540,8 @@ function renderPagination() {
 
 function renderListingGrid() {
     DOM.listingGrid.innerHTML = '';
-    
+    DOM.listingGrid.className = 'media-grid'; // Force grid layout for standard listings
+
     if (state.listing.activeItems.length === 0) {
         DOM.listingGrid.innerHTML = `<div class="empty-state"><p>No results match your filters.</p></div>`;
         return;
@@ -522,13 +561,18 @@ function renderListingGrid() {
 }
 
 // =========================================
-// 7. FAVORITES
+// 7. FAVORITES (Updated Logic)
 // =========================================
 
 function loadFavoritesPage() {
+    // 1. Filter Favorites based on Filter Dropdown
     let items = state.allContent.filter(i => state.favorites.includes(i.id));
     
-    items.reverse();
+    if (state.favFilter !== 'all') {
+        items = items.filter(i => i.type === state.favFilter);
+    }
+    
+    items.reverse(); // Show latest added first
 
     const container = DOM.favoritesGrid;
     container.innerHTML = '';
@@ -537,14 +581,113 @@ function loadFavoritesPage() {
         document.getElementById('no-favorites-msg').classList.remove('hidden');
     } else {
         document.getElementById('no-favorites-msg').classList.add('hidden');
-        const frag = document.createDocumentFragment();
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.innerHTML = createCardHTML(item);
-            frag.appendChild(div.firstElementChild);
-        });
-        container.appendChild(frag);
+        
+        // 2. Render Grid or List based on View Mode
+        if (state.favViewMode === 'list') {
+            container.className = 'list-layout'; // Use list CSS class
+            const frag = document.createDocumentFragment();
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.innerHTML = createListRowHTML(item);
+                frag.appendChild(div.firstElementChild);
+            });
+            container.appendChild(frag);
+        } else {
+            container.className = 'media-grid'; // Use grid CSS class
+            const frag = document.createDocumentFragment();
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.innerHTML = createCardHTML(item);
+                frag.appendChild(div.firstElementChild);
+            });
+            container.appendChild(frag);
+        }
     }
+}
+
+function setupFavoritesControls() {
+    // Filter Dropdown
+    if(DOM.favTypeFilter) {
+        DOM.favTypeFilter.addEventListener('change', (e) => {
+            state.favFilter = e.target.value;
+            loadFavoritesPage();
+        });
+    }
+
+    // Toggle Grid View
+    if(DOM.favViewGridBtn) {
+        DOM.favViewGridBtn.addEventListener('click', () => {
+            state.favViewMode = 'grid';
+            DOM.favViewGridBtn.classList.add('active');
+            DOM.favViewListBtn.classList.remove('active');
+            loadFavoritesPage();
+        });
+    }
+
+    // Toggle List View
+    if(DOM.favViewListBtn) {
+        DOM.favViewListBtn.addEventListener('click', () => {
+            state.favViewMode = 'list';
+            DOM.favViewListBtn.classList.add('active');
+            DOM.favViewGridBtn.classList.remove('active');
+            loadFavoritesPage();
+        });
+    }
+
+    // Clear All Confirmation
+    if(DOM.favClearBtn) {
+        DOM.favClearBtn.onclick = () => {
+            if (state.favorites.length === 0) return;
+            showConfirmDialog(
+                "Clear My List",
+                "Are you sure you want to remove all items from your list? This action cannot be undone.",
+                () => {
+                    state.favorites = [];
+                    localStorage.setItem('showcase_favorites', JSON.stringify([]));
+                    updateFavCount();
+                    loadFavoritesPage();
+                    showToast("List Cleared");
+                }
+            );
+        };
+    }
+}
+
+// Custom Confirmation Modal Function
+function showConfirmDialog(title, message, onConfirm) {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'custom-confirm-overlay';
+    
+    // Create box
+    const box = document.createElement('div');
+    box.className = 'custom-confirm-box';
+    
+    box.innerHTML = `
+        <div class="confirm-title">${title}</div>
+        <div class="confirm-text">${message}</div>
+        <div class="confirm-actions">
+            <button class="confirm-btn btn-cancel">Cancel</button>
+            <button class="confirm-btn btn-danger">Yes, Clear</button>
+        </div>
+    `;
+    
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    // Event Listeners
+    const cancelBtn = box.querySelector('.btn-cancel');
+    const confirmBtn = box.querySelector('.btn-danger');
+    
+    const close = () => document.body.removeChild(overlay);
+    
+    cancelBtn.onclick = close;
+    overlay.onclick = (e) => { if(e.target === overlay) close(); }; // Click outside to close
+    
+    confirmBtn.onclick = () => {
+        onConfirm();
+        close();
+    };
 }
 
 // =========================================
@@ -590,7 +733,6 @@ window.openDetailModal = function(id) {
             </div>`;
     }
 
-    // --- HTML Generation for Seasons (Matching new CSS) ---
     let episodesHTML = '';
     if (item.type === 'TV Show' && item.episodes && item.episodes.length > 0) {
         const episodeList = item.episodes.map(epString => {
@@ -617,7 +759,6 @@ window.openDetailModal = function(id) {
                 </div>
             </div>`;
     }
-    // ----------------------------
 
     DOM.modalBody.innerHTML = `
         <div class="modal-hero">
@@ -638,8 +779,13 @@ window.openDetailModal = function(id) {
             
             <div class="modal-controls">
                 ${playButtonHTML}
+                
                 <button class="modal-fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite('${item.id}', this)" title="${isFav ? 'Remove from List' : 'Add to List'}">
                     <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                </button>
+
+                <button class="modal-share-btn" onclick="shareItem('${item.id}')" title="Share">
+                    <i class="fa-solid fa-share-nodes"></i>
                 </button>
             </div>
 
@@ -668,15 +814,9 @@ window.openDetailModal = function(id) {
     DOM.detailModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     
-    // Explicitly handle related links to ensure clean transition
-    // Previously, an override here caused bugs. Now we just rely on the onclick inline 
-    // or add a simple logic to ensure scrolling resets.
     const relatedLinks = DOM.modalBody.querySelectorAll('.related-grid .movie-card');
     relatedLinks.forEach(card => {
-        // We do NOT override onclick completely, we just add an extra listener for UX
         card.addEventListener('click', (e) => {
-            // Note: The inline onclick="openDetailModal()" handles the data loading.
-            // This listener just ensures we don't bubble weirdly if needed.
             e.stopPropagation();
         });
     });
@@ -700,6 +840,22 @@ window.toggleFavorite = function(id, btn) {
     }
     localStorage.setItem('showcase_favorites', JSON.stringify(state.favorites));
     updateFavCount();
+};
+
+window.shareItem = function(id) {
+    // Construct a link using the hash: base_url/#view=id
+    const url = `${window.location.origin}${window.location.pathname}#view=${id}`;
+    
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('Link Copied to Clipboard');
+        }).catch(err => {
+            console.error('Failed to copy', err);
+            prompt("Copy this link:", url); // Fallback
+        });
+    } else {
+        prompt("Copy this link:", url); // Fallback for older browsers
+    }
 };
 
 window.openVideoPlayer = function(url) {
@@ -823,7 +979,8 @@ function populateFilterOptions(typeFilter = null) {
 function initApp() {
     updateFavCount();
     setupEventListeners();
-    setupSwipeGestures(); // Enable Swipe Back
+    setupFavoritesControls(); // Init new fav listeners
+    setupSwipeGestures(); 
     renderHomeRows();
     handleHashChange(); 
     
@@ -865,6 +1022,10 @@ function setupEventListeners() {
     DOM.closeDetailBtn.addEventListener('click', () => { 
         DOM.detailModal.classList.add('hidden'); 
         document.body.style.overflow = ''; 
+        // Remove #view hash if present without refreshing or creating history mess
+        if (window.location.hash.startsWith('#view=')) {
+            history.replaceState(null, null, ' ');
+        }
     });
     DOM.closeVideoBtn.addEventListener('click', closeVideoPlayer);
     
