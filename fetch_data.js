@@ -2,7 +2,7 @@ const fs = require('fs');
 
 // YOUR CONFIGURATION
 const SPREADSHEET_ID = '1R4wubVoX0rjs8Xuu_7vwQ487e4X1ES-OlER0JgSZwjQ';
-const API_KEY = 'AIzaSyAe26yWs-xvvTROq6HZ4bEKWbObMqSSHms'; // Your REAL API Key
+const API_KEY = 'AIzaSyCJJrtC0iFTAEnkpst5fSr0PvOqs812Skc'; // Your REAL API Key
 
 async function fetchSheet(sheetName) {
     // 1. Fetch data from Google API
